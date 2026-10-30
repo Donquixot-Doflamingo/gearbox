@@ -282,7 +282,7 @@ func TestEvaluateAndTests(t *testing.T) {
 	h.mustCode(404, "NOT_FOUND", "POST", app+"/decisions/lead_routing/evaluate", map[string]any{"source": "version", "version": 9, "input": in})
 	h.mustCode(422, "VALIDATION_FAILED", "POST", app+"/decisions/lead_routing/evaluate", map[string]any{"source": "draft"})
 	r = h.must(200, "POST", app+"/decisions/lead_routing/tests/run", map[string]any{"source": "draft"})
-	if !strings.Contains(string(r.Body), `"passed":1`) {
+	if !strings.Contains(string(r.Body), `"passed":6`) {
 		t.Fatalf("tests/run: %s", r.Body)
 	}
 	h.must(200, "POST", app+"/decisions/lead_routing/tests/run", nil)

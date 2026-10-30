@@ -2,7 +2,7 @@
 //
 // This file is the CONTRACT between the engine and its two users, the sidecar
 // and the control plane. Its exported names and behaviour are fixed; the
-// engine owner implements them (bodies currently return ErrNotImplemented).
+// bodies delegate to the implementation in the other files of this package.
 // Changing a signature here needs agreement from both users.
 //
 // Definitions are plain JSON matching the OpenAPI components in
@@ -24,7 +24,7 @@ import (
 // engine version they need; bump the minor version when semantics change.
 const Version = "1.0.0"
 
-// ErrNotImplemented is returned by stubs until the engine is implemented.
+// ErrNotImplemented is kept for compatibility; no engine function returns it.
 var ErrNotImplemented = errors.New("engine: not implemented")
 
 // Kind of resource, as used in API paths.
@@ -107,18 +107,18 @@ type Resolver interface {
 // compilation and type checks, graph shape, cost limits and PII rules.
 // It never returns an error for invalid input; problems are in the result.
 func ValidateResource(r Resource, deps Resolver) Validation {
-	return Validation{Valid: false, Problems: []Problem{{Code: "NOT_IMPLEMENTED", Severity: "error", Message: ErrNotImplemented.Error()}}}
+	return validate(r, deps)
 }
 
 // Dependencies lists the resources a spec reads (schemas with versions,
 // segments, lookups, gates, experiments, sub-decisions by name).
-func Dependencies(r Resource) ([]Ref, error) { return nil, ErrNotImplemented }
+func Dependencies(r Resource) ([]Ref, error) { return dependencies(r) }
 
 // CheckSchemaCompatibility compares a proposed schema spec with the previous
 // version. Breaking: removed property, newly required, narrowed type/enum,
 // removed null.
 func CheckSchemaCompatibility(prev, next json.RawMessage) (compatible bool, changes []SchemaChange, err error) {
-	return false, nil, ErrNotImplemented
+	return checkSchemaCompatibility(prev, next)
 }
 
 // SchemaChange is one difference between two schema versions.
@@ -130,7 +130,7 @@ type SchemaChange struct {
 
 // ValidateDocument checks a JSON document against a schema spec.
 func ValidateDocument(schemaSpec json.RawMessage, doc json.RawMessage) (valid bool, errs []FieldError, err error) {
-	return false, nil, ErrNotImplemented
+	return validateDocument(schemaSpec, doc)
 }
 
 // FieldError is one document validation error.
@@ -142,11 +142,12 @@ type FieldError struct {
 // Compile builds an immutable, concurrency-safe Snapshot. It fails if any
 // resource is invalid, if Set requires a newer engine, or if limits are
 // exceeded. Compile does not run test cases; call (*Snapshot).RunTests.
-func Compile(set Set) (*Snapshot, error) { return nil, ErrNotImplemented }
+func Compile(set Set) (*Snapshot, error) { return CompileWithOptions(set, CompileOptions{}) }
 
 // Snapshot is a compiled Set. Safe for concurrent use; never mutated.
 type Snapshot struct {
 	set Set
+	c   *compiled
 }
 
 // Generation of the set this snapshot was compiled from.
@@ -160,7 +161,12 @@ type DecisionInfo struct {
 }
 
 // Decisions lists the live decisions.
-func (s *Snapshot) Decisions() []DecisionInfo { return nil }
+func (s *Snapshot) Decisions() []DecisionInfo {
+	if s == nil || s.c == nil {
+		return nil
+	}
+	return s.c.decisionInfos()
+}
 
 // Request is one decision call.
 type Request struct {
@@ -252,7 +258,10 @@ func (e *Error) Error() string { return e.Reason + ": " + e.Message }
 
 // Decide evaluates one decision.
 func (s *Snapshot) Decide(ctx context.Context, req Request) (Result, error) {
-	return Result{}, ErrNotImplemented
+	if s == nil || s.c == nil {
+		return Result{}, errNotReady
+	}
+	return s.c.decide(ctx, req, nil, false)
 }
 
 // GateResult and VariantResult mirror the RPCs of the same name.
@@ -272,17 +281,26 @@ type VariantResult struct {
 
 // CheckGate evaluates a gate for a unit.
 func (s *Snapshot) CheckGate(gate, unitID string, attributes json.RawMessage) (GateResult, error) {
-	return GateResult{}, ErrNotImplemented
+	if s == nil || s.c == nil {
+		return GateResult{}, errNotReady
+	}
+	return s.c.apiGate(gate, unitID, attributes)
 }
 
 // GetVariant assigns a unit to an experiment variant.
 func (s *Snapshot) GetVariant(experiment, unitID string, attributes json.RawMessage) (VariantResult, error) {
-	return VariantResult{}, ErrNotImplemented
+	if s == nil || s.c == nil {
+		return VariantResult{}, errNotReady
+	}
+	return s.c.apiVariant(experiment, unitID, attributes)
 }
 
 // CheckSegment tests membership (used by the control plane's check endpoint).
 func (s *Snapshot) CheckSegment(segment, key, unit string, attributes json.RawMessage) (member bool, reason string, err error) {
-	return false, "", ErrNotImplemented
+	if s == nil || s.c == nil {
+		return false, "", errNotReady
+	}
+	return s.c.apiSegment(segment, key, unit, attributes)
 }
 
 // TestResult is one test case outcome; fields match TestRunResult.results[].
@@ -306,16 +324,22 @@ type Mismatch struct {
 // RunTests runs the test cases of one decision (all decisions when name is
 // empty). Version 0 = live version.
 func (s *Snapshot) RunTests(ctx context.Context, decision string, version int64) ([]TestResult, error) {
-	return nil, ErrNotImplemented
+	if s == nil || s.c == nil {
+		return nil, errNotReady
+	}
+	return s.c.runTests(ctx, decision, version)
 }
 
 // Benchmark runs each test case n times and returns p99 micros per decision
 // (publish-time budget check).
 func (s *Snapshot) Benchmark(ctx context.Context, n int) (map[string]int64, error) {
-	return nil, ErrNotImplemented
+	if s == nil || s.c == nil {
+		return nil, errNotReady
+	}
+	return s.c.benchmark(ctx, n)
 }
 
 // Catalogue returns the function/operator catalogue for GET /meta/expr.
 func Catalogue() json.RawMessage {
-	return json.RawMessage(`{"functions":[],"operators":[],"conditionOperators":[],"variables":[]}`)
+	return append(json.RawMessage(nil), catalogueJSON...)
 }

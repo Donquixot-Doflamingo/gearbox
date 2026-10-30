@@ -21,7 +21,7 @@ const leadRouting = `{
    "outputSchema": {"name": "eligibility_output", "version": 1},
    "rules": [
     {"id": "r1", "when": {"segment": "blocked_cities", "op": "IN_SEGMENT", "key": "input.city"}, "then": {"eligible": false, "reason": "city_not_served"}},
-    {"id": "r4", "when": {"all": [{"field": "price", "op": "GT", "value": 1}, {"segment": "metro_premium", "op": "NOT_IN_SEGMENT", "attributes": {"city": "input.city"}}, {"gate": "new_flow", "op": "GATE_PASSES"}]},
+    {"id": "r4", "when": {"all": [{"field": "price", "op": "GT", "value": 1}, {"segment": "metro_premium", "op": "NOT_IN_SEGMENT", "attributes": {"city": "input.city", "price": "input.price"}}, {"gate": "new_flow", "op": "GATE_PASSES"}]},
      "then": {"eligible": true, "lane": "fast", "reason": "fast_lane"}}
    ],
    "default": {"eligible": true, "lane": "standard", "reason": "default"}, "next": "output"},

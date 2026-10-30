@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"context"
 	"crypto/ed25519"
+	"errors"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
@@ -18,6 +19,7 @@ import (
 	"github.com/ORG/gearbox/controlplane/internal/seed"
 	"github.com/ORG/gearbox/controlplane/internal/server"
 	"github.com/ORG/gearbox/controlplane/internal/store"
+	"github.com/ORG/gearbox/engine/bundle"
 )
 
 func startServer(t *testing.T) string {
@@ -159,7 +161,10 @@ func TestCLI(t *testing.T) {
 		t.Fatal(out)
 	}
 	data, _ := os.ReadFile(bf)
-	env, blobs, err := engineapi.ReadLiteFile(data)
+	env, blobs, err := bundle.ReadFile(data)
+	if errors.Is(err, bundle.ErrNotImplemented) {
+		env, blobs, err = engineapi.ReadLiteFile(data)
+	}
 	if err != nil || len(env) == 0 || len(blobs) != 13 {
 		t.Fatalf("bundle file: %v %d", err, len(blobs))
 	}
