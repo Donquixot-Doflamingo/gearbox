@@ -56,21 +56,21 @@ jobs:
 
   ui:
     runs-on: ubuntu-latest
-    if: ${{ hashFiles('ui/package.json') != '' }}
-    defaults:
-      run:
-        working-directory: ui
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - id: present
+        run: if [ -f ui/package.json ]; then echo "ui=true" >> "$GITHUB_OUTPUT"; fi
+      - if: steps.present.outputs.ui == 'true'
+        uses: actions/setup-node@v4
         with:
           node-version: 22
-          cache: npm
-          cache-dependency-path: ui/package-lock.json
-      - run: npm ci
-      - run: npm run check
-      - run: npm run test --if-present
-      - run: npm run build
+      - if: steps.present.outputs.ui == 'true'
+        working-directory: ui
+        run: |
+          if [ -f package-lock.json ]; then npm ci; else npm install; fi
+          npm run check
+          npm run test --if-present
+          npm run build
 
   helm:
     runs-on: ubuntu-latest
