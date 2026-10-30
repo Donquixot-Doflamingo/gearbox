@@ -25,11 +25,14 @@ func toYAML(raw json.RawMessage) string {
 	if json.Unmarshal(raw, &v) != nil {
 		return string(raw)
 	}
-	b, err := yaml.Marshal(v)
-	if err != nil {
+	var buf strings.Builder
+	enc := yaml.NewEncoder(&buf)
+	enc.SetIndent(2)
+	if err := enc.Encode(v); err != nil {
 		return string(raw)
 	}
-	return string(b)
+	_ = enc.Close()
+	return buf.String()
 }
 
 // diffSpecs returns a unified diff of the YAML forms and structured changes.
@@ -143,12 +146,12 @@ func unifiedDiff(a, b, aName, bName string) string {
 			ops = append(ops, op{' ', al[i], i, j})
 			i++
 			j++
-		case j < m && (i >= n || lcs[i][j+1] >= lcs[i+1][j]):
-			ops = append(ops, op{'+', bl[j], i, j})
-			j++
-		default:
+		case i < n && (j >= m || lcs[i+1][j] >= lcs[i][j+1]):
 			ops = append(ops, op{'-', al[i], i, j})
 			i++
+		default:
+			ops = append(ops, op{'+', bl[j], i, j})
+			j++
 		}
 	}
 	const ctx = 3
