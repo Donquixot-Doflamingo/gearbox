@@ -63,6 +63,10 @@
   let fields = $derived(ed.spec?.jsonSchema ? listFields(ed.spec.jsonSchema) : []);
   let canEdit = $derived(session.can('edit'));
 
+  function useExample(): void {
+    if (ed.spec.examples?.length) doc = $state.snapshot(ed.spec.examples[0]);
+  }
+
   function addExample(): void {
     ed.spec.examples = [...(ed.spec.examples ?? []), exampleFor(ed.spec.jsonSchema)];
   }
@@ -131,7 +135,7 @@
         <JsonEditor bind:value={doc} rows={16} id="doc-json" />
         <div class="actions">
           <button type="button" class="btn btn-primary" onclick={checkDoc} disabled={docBusy}>Check</button>
-          {#if ed.spec.examples?.length}<button type="button" class="btn" onclick={() => (doc = $state.snapshot(ed.spec.examples![0]))}>Use example 1</button>{/if}
+          {#if ed.spec.examples?.length}<button type="button" class="btn" onclick={useExample}>Use example 1</button>{/if}
           <button type="button" class="btn" onclick={() => (doc = exampleFor(ed.spec.jsonSchema))}>Skeleton</button>
         </div>
       </section>
