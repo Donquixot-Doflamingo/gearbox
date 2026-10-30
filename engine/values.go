@@ -196,6 +196,16 @@ func normalize(v any) any {
 	}
 	rv := reflect.ValueOf(v)
 	switch rv.Kind() {
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+		return float64(rv.Int())
+	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+		return float64(rv.Uint())
+	case reflect.Float32, reflect.Float64:
+		return rv.Float()
+	case reflect.Bool:
+		return rv.Bool()
+	case reflect.String:
+		return rv.String()
 	case reflect.Slice, reflect.Array:
 		l := make([]any, rv.Len())
 		for i := range l {

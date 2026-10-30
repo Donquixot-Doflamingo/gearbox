@@ -71,11 +71,20 @@ func newBuilder(res Resolver, app, env string, piiKey []byte) *builder {
 }
 
 func (b *builder) errorf(code, path, format string, args ...any) {
-	b.problems = append(b.problems, Problem{Code: code, Severity: "error", Path: path, Message: fmt.Sprintf(format, args...)})
+	b.add(Problem{Code: code, Severity: "error", Path: path, Message: fmt.Sprintf(format, args...)})
 }
 
 func (b *builder) warnf(code, path, format string, args ...any) {
-	b.problems = append(b.problems, Problem{Code: code, Severity: "warning", Path: path, Message: fmt.Sprintf(format, args...)})
+	b.add(Problem{Code: code, Severity: "warning", Path: path, Message: fmt.Sprintf(format, args...)})
+}
+
+func (b *builder) add(p Problem) {
+	for _, q := range b.problems {
+		if q == p {
+			return
+		}
+	}
+	b.problems = append(b.problems, p)
 }
 
 func (b *builder) errorCount() int {
