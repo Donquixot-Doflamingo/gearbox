@@ -77,7 +77,7 @@ func TestChangeRequestsAndReleases(t *testing.T) {
 		Tests struct{ Passed, Failed int } `json:"tests"`
 	}
 	r.JSON(t, &cr)
-	if cr.Status != "open" || cr.RequiredApprovals != 1 || cr.Tests.Passed != 1 || cr.Items[0].Diff == "" {
+	if cr.Status != "open" || cr.RequiredApprovals != 1 || cr.Tests.Passed != 6 || cr.Items[0].Diff == "" {
 		t.Fatalf("cr: %s", r.Body)
 	}
 	h.mustCode(422, "VALIDATION_FAILED", "POST", app+"/change-requests", map[string]any{"environment": "prod", "title": "bad", "items": []any{map[string]any{"kind": "decisions", "name": "lead_routing", "version": 99}}}, author)
@@ -261,7 +261,7 @@ func TestTestsFailedAndBudget(t *testing.T) {
 		t.Fatalf("tests failed body: %s", r.Body)
 	}
 	r = h.must(200, "POST", app+"/decisions/lead_routing/tests/run", nil)
-	if !strings.Contains(string(r.Body), `"failed":1`) {
+	if !strings.Contains(string(r.Body), `"failed":6`) {
 		t.Fatalf("tests/run: %s", r.Body)
 	}
 	h.mustCode(422, "TESTS_FAILED", "POST", app+"/environments/dev/releases", map[string]any{"type": "kill_switch", "gate": "new_inspection_flow"})

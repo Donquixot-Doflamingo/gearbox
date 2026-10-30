@@ -108,11 +108,11 @@ func DemoFiles() []defs.File {
     {"id": "output", "type": "output", "fields": [
       {"target": "route", "expr": "nodes.eligibility.eligible ? (nodes.eligibility.lane == \"fast\" ? \"fast_track\" : \"standard\") : \"reject\""},
       {"target": "reason", "expr": "nodes.eligibility.reason"}]}],
+  "inputSchema": {"name": "lead_input", "version": 1},
   "output": {"schema": {"name": "routing_output", "version": 1}},
   "fallback": {"route": "manual_review", "reason": "fallback"},
-  "tests": [{"name": "fast track", "ctx": {"now": "2026-10-30T10:00:00Z", "unit": "L-1029384"},
-    "input": {"lead": {"id": "L-1029384", "city": "Gurgaon", "source": "app"}, "car": {"year": 2019, "km": 48200, "price": 525000}, "inspections": [{"part": "engine", "score": 8}]},
-    "expect": {"route": "fast_track"}}]}`)},
+  "logging": {"sample": 1, "fields": ["lead.city", "car.year", "output.route"]},
+  "tests": [{"name": "fast track", "ctx": {"now": "2026-10-30T10:00:00Z", "unit": "L-1029386"}, "input": {"lead": {"id": "L-1029384", "city": "Gurgaon", "source": "app"}, "car": {"year": 2019, "km": 48200, "price": 525000}, "inspections": [{"part": "engine", "score": 8}]}, "expect": {"route": "fast_track"}, "expectPath": ["normalize:ok", "eligibility:r4", "output:ok"]}, {"name": "outside rollout gets standard", "ctx": {"now": "2026-10-30T10:00:00Z", "unit": "L-1029384"}, "input": {"lead": {"id": "L-2", "city": "Gurgaon", "source": "app"}, "car": {"year": 2019, "km": 48200, "price": 525000}, "inspections": [{"part": "engine", "score": 8}]}, "expect": {"route": "standard", "reason": "default"}}, {"name": "blocked city", "ctx": {"now": "2026-10-30T10:00:00Z", "unit": "L-3"}, "input": {"lead": {"id": "L-3", "city": "Srinagar", "source": "web"}, "car": {"year": 2020, "km": 1000, "price": 400000}}, "expect": {"route": "reject", "reason": "city_not_served"}}, {"name": "too old", "ctx": {"now": "2026-10-30T10:00:00Z", "unit": "L-4"}, "input": {"lead": {"id": "L-4", "city": "Pune", "source": "web"}, "car": {"year": 2010, "km": 1000, "price": 400000}}, "expect": {"route": "reject", "reason": "car_too_old"}}, {"name": "metro premium is not fast", "ctx": {"now": "2026-10-30T10:00:00Z", "unit": "L-1029386"}, "input": {"lead": {"id": "L-5", "city": "Mumbai", "source": "app"}, "car": {"year": 2022, "km": 1000, "price": 950000}, "inspections": [{"part": "engine", "score": 9}]}, "expect": {"route": "standard"}}, {"name": "missing car fails the input schema", "input": {"lead": {"id": "L-6", "city": "Pune"}}, "expectError": "INPUT_SCHEMA"}]}`)},
 	}
 }
 
