@@ -1,0 +1,259 @@
+{
+ "description": "Golden allocation fixtures ported for behaviour parity with the previous experimentation service. allocation = murmur3_32 (x86, seed 0) over a length-prefixed frame (uint32 big-endian lengths) of [schemaVersion, tenantId, scope, resourceId, assignmentVersion, salt, randomizationValue]; bucket = hash*10000>>32.",
+ "allocationCases": [
+  {
+   "name": "experiment ascii",
+   "schemaVersion": "1",
+   "tenantId": "tenant-a",
+   "scope": "experiment",
+   "resourceId": "exp-checkout",
+   "assignmentVersion": "3",
+   "salt": "salt-1",
+   "randomizationValue": "user-42",
+   "inputHex": "00000001310000000874656e616e742d610000000a6578706572696d656e740000000c6578702d636865636b6f757400000001330000000673616c742d3100000007757365722d3432",
+   "hash": "1ba1fc0d",
+   "bucket": 1079
+  },
+  {
+   "name": "layer unicode",
+   "schemaVersion": "1",
+   "tenantId": "租户",
+   "scope": "layer",
+   "resourceId": "layer-🧪",
+   "assignmentVersion": "1",
+   "salt": "sält",
+   "randomizationValue": "  José 🐘  ",
+   "inputHex": "000000013100000006e7a79fe688b7000000056c617965720000000a6c617965722df09fa7aa00000001310000000573c3a46c740000000e20204a6f73c3a920f09f90982020",
+   "hash": "2f8e89cb",
+   "bucket": 1857
+  },
+  {
+   "name": "holdout empty optional context",
+   "schemaVersion": "1",
+   "tenantId": "tenant-a",
+   "scope": "holdout",
+   "resourceId": "holdout-global",
+   "assignmentVersion": "0",
+   "salt": "",
+   "randomizationValue": "",
+   "inputHex": "00000001310000000874656e616e742d6100000007686f6c646f75740000000e686f6c646f75742d676c6f62616c00000001300000000000000000",
+   "hash": "d6f7a43b",
+   "bucket": 8397
+  },
+  {
+   "name": "experiment lower boundary",
+   "schemaVersion": "1",
+   "tenantId": "boundary",
+   "scope": "experiment",
+   "resourceId": "boundary-resource",
+   "assignmentVersion": "1",
+   "salt": "boundary-salt",
+   "randomizationValue": "unit-38756",
+   "inputHex": "000000013100000008626f756e646172790000000a6578706572696d656e7400000011626f756e646172792d7265736f7572636500000001310000000d626f756e646172792d73616c740000000a756e69742d3338373536",
+   "hash": "d75f10d6",
+   "bucket": 8412
+  },
+  {
+   "name": "experiment upper boundary",
+   "schemaVersion": "1",
+   "tenantId": "boundary",
+   "scope": "experiment",
+   "resourceId": "boundary-resource",
+   "assignmentVersion": "1",
+   "salt": "boundary-salt",
+   "randomizationValue": "unit-2815",
+   "inputHex": "000000013100000008626f756e646172790000000a6578706572696d656e7400000011626f756e646172792d7265736f7572636500000001310000000d626f756e646172792d73616c7400000009756e69742d32383135",
+   "hash": "2f02e81f",
+   "bucket": 1836
+  },
+  {
+   "name": "layer lower boundary",
+   "schemaVersion": "1",
+   "tenantId": "boundary",
+   "scope": "layer",
+   "resourceId": "boundary-resource",
+   "assignmentVersion": "1",
+   "salt": "boundary-salt",
+   "randomizationValue": "unit-1257",
+   "inputHex": "000000013100000008626f756e64617279000000056c6179657200000011626f756e646172792d7265736f7572636500000001310000000d626f756e646172792d73616c7400000009756e69742d31323537",
+   "hash": "b639b2a0",
+   "bucket": 7118
+  },
+  {
+   "name": "layer upper boundary",
+   "schemaVersion": "1",
+   "tenantId": "boundary",
+   "scope": "layer",
+   "resourceId": "boundary-resource",
+   "assignmentVersion": "1",
+   "salt": "boundary-salt",
+   "randomizationValue": "unit-28277",
+   "inputHex": "000000013100000008626f756e64617279000000056c6179657200000011626f756e646172792d7265736f7572636500000001310000000d626f756e646172792d73616c740000000a756e69742d3238323737",
+   "hash": "1ba67c3f",
+   "bucket": 1080
+  },
+  {
+   "name": "holdout lower boundary",
+   "schemaVersion": "1",
+   "tenantId": "boundary",
+   "scope": "holdout",
+   "resourceId": "boundary-resource",
+   "assignmentVersion": "1",
+   "salt": "boundary-salt",
+   "randomizationValue": "unit-14685",
+   "inputHex": "000000013100000008626f756e6461727900000007686f6c646f757400000011626f756e646172792d7265736f7572636500000001310000000d626f756e646172792d73616c740000000a756e69742d3134363835",
+   "hash": "d6413565",
+   "bucket": 8369
+  },
+  {
+   "name": "holdout upper boundary",
+   "schemaVersion": "1",
+   "tenantId": "boundary",
+   "scope": "holdout",
+   "resourceId": "boundary-resource",
+   "assignmentVersion": "1",
+   "salt": "boundary-salt",
+   "randomizationValue": "unit-13804",
+   "inputHex": "000000013100000008626f756e6461727900000007686f6c646f757400000011626f756e646172792d7265736f7572636500000001310000000d626f756e646172792d73616c740000000a756e69742d3133383034",
+   "hash": "5f8a62e7",
+   "bucket": 3732
+  }
+ ],
+ "rangeCases": [
+  {
+   "name": "half-open boundaries",
+   "ranges": [
+    {
+     "start": 0,
+     "end": 1,
+     "value": "first"
+    },
+    {
+     "start": 1,
+     "end": 5000,
+     "value": "middle"
+    },
+    {
+     "start": 5000,
+     "end": 10000,
+     "value": "last"
+    }
+   ],
+   "lookups": [
+    {
+     "bucket": 0,
+     "value": "first"
+    },
+    {
+     "bucket": 1,
+     "value": "middle"
+    },
+    {
+     "bucket": 4999,
+     "value": "middle"
+    },
+    {
+     "bucket": 5000,
+     "value": "last"
+    },
+    {
+     "bucket": 9999,
+     "value": "last"
+    }
+   ]
+  },
+  {
+   "name": "gap is unallocated",
+   "ranges": [
+    {
+     "start": 100,
+     "end": 200,
+     "value": "allocated"
+    }
+   ],
+   "lookups": [
+    {
+     "bucket": 99
+    },
+    {
+     "bucket": 100,
+     "value": "allocated"
+    },
+    {
+     "bucket": 200
+    }
+   ]
+  }
+ ],
+ "invalidRanges": [
+  {
+   "name": "overlap",
+   "ranges": [
+    {
+     "start": 0,
+     "end": 2,
+     "value": "a"
+    },
+    {
+     "start": 1,
+     "end": 3,
+     "value": "b"
+    }
+   ],
+   "error": "bucket ranges overlap"
+  },
+  {
+   "name": "out of bounds",
+   "ranges": [
+    {
+     "start": 0,
+     "end": 10001,
+     "value": "a"
+    }
+   ],
+   "error": "bucket range must satisfy 0 <= start < end <= 10000"
+  },
+  {
+   "name": "empty",
+   "ranges": [
+    {
+     "start": 3,
+     "end": 3,
+     "value": "a"
+    }
+   ],
+   "error": "bucket range must satisfy 0 <= start < end <= 10000"
+  }
+ ],
+ "overrideDigestCases": [
+  {
+   "name": "unicode exact unit",
+   "schemaVersion": "1",
+   "tenantId": "tenant-a",
+   "resourceId": "exp-checkout",
+   "assignmentVersion": "3",
+   "salt": "secret-salt",
+   "unit": {
+    "kind": "USER_ID"
+   },
+   "randomizationValue": "  José 🐘  ",
+   "inputHex": "00000001310000000874656e616e742d610000000c6578702d636865636b6f757400000001330000000b7365637265742d73616c7400000007555345525f4944000000000000000e20204a6f73c3a920f09f90982020",
+   "digest": "ccd482eebbb65a258f4c4022bf1bb03fb0e018071345cda507bcf4c0daf06e5a"
+  },
+  {
+   "name": "property exact unit",
+   "schemaVersion": "1",
+   "tenantId": "租户",
+   "resourceId": "layer-🧪",
+   "assignmentVersion": "1",
+   "salt": "sält",
+   "unit": {
+    "kind": "PROPERTY",
+    "property": "account"
+   },
+   "randomizationValue": "東京",
+   "inputHex": "000000013100000006e7a79fe688b70000000a6c617965722df09fa7aa00000001310000000573c3a46c740000000850524f5045525459000000076163636f756e7400000006e69db1e4baac",
+   "digest": "f4860cbe22f5148fcdbae1ebd53c3a99f209b0ed0e088803887f1fbb75025101"
+  }
+ ]
+}
