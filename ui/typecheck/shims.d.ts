@@ -32,8 +32,10 @@ declare module 'vitest' {
   export const vi: { fn: <T extends Fn = Fn>(impl?: T) => T & { mock: { calls: any[][] } } };
 }
 
-declare module 'vite' {
+declare module 'vitest/config' {
   export function defineConfig<T>(c: T): T;
+}
+declare module 'vite' {
   export function loadEnv(mode: string, dir: string, prefixes: string | string[]): Record<string, string>;
 }
 declare module '@sveltejs/kit/vite' {

@@ -1,5 +1,6 @@
 import { sveltekit } from '@sveltejs/kit/vite';
-import { defineConfig, loadEnv } from 'vite';
+import { loadEnv } from 'vite';
+import { defineConfig } from 'vitest/config';
 
 // PUBLIC_GEARBOX_API  base URL of the control-plane API (default /api/v1)
 // PUBLIC_GEARBOX_MOCK 1 = always use the in-browser mock API with sample data
