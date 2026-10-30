@@ -280,7 +280,7 @@ func TestEvaluateAndTests(t *testing.T) {
 	// Lite and real engines both reject input that fails the entry schema
 	// only for rules entry nodes; lead_routing starts with a transform.
 	h.mustCode(404, "NOT_FOUND", "POST", app+"/decisions/lead_routing/evaluate", map[string]any{"source": "version", "version": 9, "input": in})
-	h.mustCode(400, "INVALID_ARGUMENT", "POST", app+"/decisions/lead_routing/evaluate", map[string]any{"source": "draft"})
+	h.mustCode(422, "VALIDATION_FAILED", "POST", app+"/decisions/lead_routing/evaluate", map[string]any{"source": "draft"})
 	r = h.must(200, "POST", app+"/decisions/lead_routing/tests/run", map[string]any{"source": "draft"})
 	if !strings.Contains(string(r.Body), `"passed":1`) {
 		t.Fatalf("tests/run: %s", r.Body)

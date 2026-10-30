@@ -281,46 +281,37 @@ func (s *Server) validateRequest(r *http.Request, rt *route) error {
 func flattenRequestErrors(err error) (out []FieldError, body bool) {
 	var walk func(error, string)
 	walk = func(e error, prefix string) {
-		var me openapi3.MultiError
-		if errors.As(e, &me) {
-			for _, x := range me {
+		switch t := e.(type) {
+		case openapi3.MultiError:
+			for _, x := range t {
 				walk(x, prefix)
 			}
-			return
-		}
-		var re *openapi3filter.RequestError
-		if errors.As(e, &re) {
+		case *openapi3filter.RequestError:
 			p := prefix
-			if re.Parameter != nil {
-				p = "/" + re.Parameter.In + "/" + re.Parameter.Name
-			} else if re.RequestBody != nil {
+			if t.Parameter != nil {
+				p = "/" + t.Parameter.In + "/" + t.Parameter.Name
+			} else if t.RequestBody != nil {
 				body = true
 			}
-			if re.Err != nil {
-				var inner openapi3.MultiError
-				var se *openapi3.SchemaError
-				if errors.As(re.Err, &inner) || errors.As(re.Err, &se) {
-					walk(re.Err, p)
-					return
-				}
+			switch t.Err.(type) {
+			case openapi3.MultiError, *openapi3.SchemaError:
+				walk(t.Err, p)
+				return
 			}
-			out = append(out, FieldError{Path: orRoot(p), Message: re.Reason + errSuffix(re.Err)})
-			return
-		}
-		var se *openapi3.SchemaError
-		if errors.As(e, &se) {
+			out = append(out, FieldError{Path: orRoot(p), Message: t.Reason + errSuffix(t.Err)})
+		case *openapi3.SchemaError:
 			ptr := prefix
-			for _, part := range se.JSONPointer() {
+			for _, part := range t.JSONPointer() {
 				ptr += "/" + strings.ReplaceAll(strings.ReplaceAll(part, "~", "~0"), "/", "~1")
 			}
-			msg := se.Reason
-			if se.SchemaField != "" {
-				msg = se.Reason
+			out = append(out, FieldError{Path: orRoot(ptr), Message: t.Reason})
+		default:
+			if u, ok := e.(interface{ Unwrap() error }); ok && u.Unwrap() != nil {
+				walk(u.Unwrap(), prefix)
+				return
 			}
-			out = append(out, FieldError{Path: orRoot(ptr), Message: msg})
-			return
+			out = append(out, FieldError{Path: orRoot(prefix), Message: e.Error()})
 		}
-		out = append(out, FieldError{Path: orRoot(prefix), Message: e.Error()})
 	}
 	walk(err, "")
 	sort.SliceStable(out, func(i, j int) bool { return out[i].Path < out[j].Path })
