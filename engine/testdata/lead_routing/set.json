@@ -1,0 +1,611 @@
+{
+ "app": "lead_service",
+ "environment": "prod",
+ "generation": 42,
+ "resources": [
+  {
+   "kind": "schemas",
+   "name": "lead_input",
+   "version": 1,
+   "spec": {
+    "jsonSchema": {
+     "type": "object",
+     "required": [
+      "lead",
+      "car"
+     ],
+     "properties": {
+      "lead": {
+       "type": "object",
+       "required": [
+        "id",
+        "city"
+       ],
+       "properties": {
+        "id": {
+         "type": "string"
+        },
+        "first_name": {
+         "type": [
+          "string",
+          "null"
+         ]
+        },
+        "last_name": {
+         "type": [
+          "string",
+          "null"
+         ]
+        },
+        "phone": {
+         "type": "string",
+         "x-gearbox-pii": true
+        },
+        "city": {
+         "type": "string"
+        },
+        "source": {
+         "enum": [
+          "app",
+          "web",
+          "partner"
+         ]
+        }
+       }
+      },
+      "car": {
+       "type": "object",
+       "required": [
+        "year",
+        "km",
+        "price"
+       ],
+       "properties": {
+        "make": {
+         "type": "string"
+        },
+        "model": {
+         "type": "string"
+        },
+        "year": {
+         "type": "integer",
+         "minimum": 1980
+        },
+        "km": {
+         "type": "integer",
+         "minimum": 0
+        },
+        "price": {
+         "type": "number",
+         "minimum": 0
+        }
+       }
+      },
+      "inspections": {
+       "type": "array",
+       "maxItems": 50,
+       "items": {
+        "type": "object",
+        "required": [
+         "part",
+         "score"
+        ],
+        "properties": {
+         "part": {
+          "type": "string"
+         },
+         "score": {
+          "type": "number"
+         }
+        }
+       }
+      }
+     }
+    },
+    "examples": [
+     {
+      "lead": {
+       "id": "L-1",
+       "city": "Pune",
+       "source": "web"
+      },
+      "car": {
+       "year": 2021,
+       "km": 12000,
+       "price": 690000
+      }
+     }
+    ]
+   }
+  },
+  {
+   "kind": "schemas",
+   "name": "eligibility_input",
+   "version": 1,
+   "spec": {
+    "jsonSchema": {
+     "type": "object",
+     "required": [
+      "city",
+      "ageYears",
+      "km",
+      "price",
+      "inspectionAvg"
+     ],
+     "properties": {
+      "city": {
+       "type": "string"
+      },
+      "source": {
+       "enum": [
+        "app",
+        "web",
+        "partner"
+       ]
+      },
+      "ageYears": {
+       "type": "number"
+      },
+      "km": {
+       "type": "integer",
+       "minimum": 0
+      },
+      "price": {
+       "type": "number",
+       "minimum": 0
+      },
+      "inspectionAvg": {
+       "type": "number"
+      }
+     }
+    }
+   }
+  },
+  {
+   "kind": "schemas",
+   "name": "eligibility_output",
+   "version": 1,
+   "spec": {
+    "jsonSchema": {
+     "type": "object",
+     "required": [
+      "eligible",
+      "reason"
+     ],
+     "properties": {
+      "eligible": {
+       "type": "boolean"
+      },
+      "lane": {
+       "enum": [
+        "fast",
+        "standard"
+       ]
+      },
+      "reason": {
+       "type": "string"
+      }
+     }
+    }
+   }
+  },
+  {
+   "kind": "schemas",
+   "name": "routing_output",
+   "version": 1,
+   "spec": {
+    "jsonSchema": {
+     "type": "object",
+     "required": [
+      "route",
+      "reason"
+     ],
+     "properties": {
+      "route": {
+       "enum": [
+        "fast_track",
+        "standard",
+        "reject",
+        "manual_review"
+       ]
+      },
+      "reason": {
+       "type": "string"
+      }
+     }
+    }
+   }
+  },
+  {
+   "kind": "schemas",
+   "name": "segment_attrs_city_price",
+   "version": 1,
+   "spec": {
+    "jsonSchema": {
+     "type": "object",
+     "required": [
+      "city",
+      "price"
+     ],
+     "properties": {
+      "city": {
+       "type": "string"
+      },
+      "price": {
+       "type": "number"
+      }
+     }
+    }
+   }
+  },
+  {
+   "kind": "segments",
+   "name": "blocked_cities",
+   "version": 3,
+   "spec": {
+    "type": "static",
+    "static": {
+     "keyType": "string"
+    }
+   },
+   "segmentMembers": [
+    "Srinagar",
+    "Leh",
+    "Port Blair"
+   ]
+  },
+  {
+   "kind": "segments",
+   "name": "metro_premium",
+   "version": 1,
+   "spec": {
+    "type": "dynamic",
+    "dynamic": {
+     "attributesSchema": {
+      "name": "segment_attrs_city_price",
+      "version": 1
+     },
+     "when": {
+      "all": [
+       {
+        "field": "city",
+        "op": "IN",
+        "value": [
+         "Delhi",
+         "Gurgaon",
+         "Mumbai",
+         "Bengaluru"
+        ]
+       },
+       {
+        "field": "price",
+        "op": "GT",
+        "value": 800000
+       }
+      ]
+     }
+    }
+   }
+  },
+  {
+   "kind": "decisions",
+   "name": "lead_routing",
+   "version": 17,
+   "spec": {
+    "entry": "normalize",
+    "nodes": [
+     {
+      "id": "normalize",
+      "type": "transform",
+      "outputSchema": {
+       "name": "eligibility_input",
+       "version": 1
+      },
+      "fields": [
+       {
+        "target": "city",
+        "expr": "input.lead.city"
+       },
+       {
+        "target": "source",
+        "expr": "input.lead.source"
+       },
+       {
+        "target": "ageYears",
+        "expr": "ctx.now.Year() - input.car.year"
+       },
+       {
+        "target": "km",
+        "expr": "input.car.km"
+       },
+       {
+        "target": "price",
+        "expr": "input.car.price"
+       },
+       {
+        "target": "inspectionAvg",
+        "expr": "mean(map(input.inspections ?? [], .score)) ?? 0"
+       }
+      ],
+      "next": "eligibility"
+     },
+     {
+      "id": "eligibility",
+      "type": "rules",
+      "inputSchema": {
+       "name": "eligibility_input",
+       "version": 1
+      },
+      "outputSchema": {
+       "name": "eligibility_output",
+       "version": 1
+      },
+      "mode": "first_match",
+      "rules": [
+       {
+        "id": "r1",
+        "name": "Blocked city",
+        "when": {
+         "segment": "blocked_cities",
+         "op": "IN_SEGMENT",
+         "key": "input.city"
+        },
+        "then": {
+         "eligible": false,
+         "reason": "city_not_served"
+        }
+       },
+       {
+        "id": "r2",
+        "name": "Too old",
+        "when": {
+         "field": "ageYears",
+         "op": "GT",
+         "value": 12
+        },
+        "then": {
+         "eligible": false,
+         "reason": "car_too_old"
+        }
+       },
+       {
+        "id": "r4",
+        "name": "Fast lane",
+        "rollout": {
+         "percent": 25,
+         "salt": "eligibility.r4"
+        },
+        "when": {
+         "all": [
+          {
+           "field": "price",
+           "op": "BETWEEN",
+           "value": 300000,
+           "valueTo": 2500000
+          },
+          {
+           "field": "source",
+           "op": "IN",
+           "value": [
+            "app",
+            "web"
+           ]
+          },
+          {
+           "field": "inspectionAvg",
+           "op": "GTE",
+           "value": 7
+          },
+          {
+           "segment": "metro_premium",
+           "op": "NOT_IN_SEGMENT",
+           "attributes": {
+            "city": "input.city",
+            "price": "input.price"
+           }
+          }
+         ]
+        },
+        "then": {
+         "eligible": true,
+         "lane": "fast",
+         "reason": "fast_lane"
+        }
+       }
+      ],
+      "default": {
+       "eligible": true,
+       "lane": "standard",
+       "reason": "default"
+      },
+      "next": "output"
+     },
+     {
+      "id": "output",
+      "type": "output",
+      "fields": [
+       {
+        "target": "route",
+        "expr": "nodes.eligibility.eligible ? (nodes.eligibility.lane == \"fast\" ? \"fast_track\" : \"standard\") : \"reject\""
+       },
+       {
+        "target": "reason",
+        "expr": "nodes.eligibility.reason"
+       }
+      ]
+     }
+    ],
+    "output": {
+     "schema": {
+      "name": "routing_output",
+      "version": 1
+     }
+    },
+    "fallback": {
+     "route": "manual_review",
+     "reason": "fallback"
+    },
+    "logging": {
+     "sample": 1,
+     "fields": [
+      "lead.city",
+      "car.year",
+      "output.route"
+     ]
+    },
+    "tests": [
+     {
+      "name": "fast track",
+      "ctx": {
+       "now": "2026-10-30T10:00:00Z",
+       "unit": "L-1029386"
+      },
+      "input": {
+       "lead": {
+        "id": "L-1029384",
+        "city": "Gurgaon",
+        "source": "app"
+       },
+       "car": {
+        "year": 2019,
+        "km": 48200,
+        "price": 525000
+       },
+       "inspections": [
+        {
+         "part": "engine",
+         "score": 8
+        }
+       ]
+      },
+      "expect": {
+       "route": "fast_track"
+      },
+      "expectPath": [
+       "normalize:ok",
+       "eligibility:r4",
+       "output:ok"
+      ]
+     },
+     {
+      "name": "outside rollout gets standard",
+      "ctx": {
+       "now": "2026-10-30T10:00:00Z",
+       "unit": "L-1029384"
+      },
+      "input": {
+       "lead": {
+        "id": "L-2",
+        "city": "Gurgaon",
+        "source": "app"
+       },
+       "car": {
+        "year": 2019,
+        "km": 48200,
+        "price": 525000
+       },
+       "inspections": [
+        {
+         "part": "engine",
+         "score": 8
+        }
+       ]
+      },
+      "expect": {
+       "route": "standard",
+       "reason": "default"
+      }
+     },
+     {
+      "name": "blocked city",
+      "ctx": {
+       "now": "2026-10-30T10:00:00Z",
+       "unit": "L-3"
+      },
+      "input": {
+       "lead": {
+        "id": "L-3",
+        "city": "Srinagar",
+        "source": "web"
+       },
+       "car": {
+        "year": 2020,
+        "km": 1000,
+        "price": 400000
+       }
+      },
+      "expect": {
+       "route": "reject",
+       "reason": "city_not_served"
+      }
+     },
+     {
+      "name": "too old",
+      "ctx": {
+       "now": "2026-10-30T10:00:00Z",
+       "unit": "L-4"
+      },
+      "input": {
+       "lead": {
+        "id": "L-4",
+        "city": "Pune",
+        "source": "web"
+       },
+       "car": {
+        "year": 2010,
+        "km": 1000,
+        "price": 400000
+       }
+      },
+      "expect": {
+       "route": "reject",
+       "reason": "car_too_old"
+      }
+     },
+     {
+      "name": "metro premium is not fast",
+      "ctx": {
+       "now": "2026-10-30T10:00:00Z",
+       "unit": "L-1029386"
+      },
+      "input": {
+       "lead": {
+        "id": "L-5",
+        "city": "Mumbai",
+        "source": "app"
+       },
+       "car": {
+        "year": 2022,
+        "km": 1000,
+        "price": 950000
+       },
+       "inspections": [
+        {
+         "part": "engine",
+         "score": 9
+        }
+       ]
+      },
+      "expect": {
+       "route": "standard"
+      }
+     },
+     {
+      "name": "missing car fails the input schema",
+      "input": {
+       "lead": {
+        "id": "L-6",
+        "city": "Pune"
+       }
+      },
+      "expectError": "INPUT_SCHEMA"
+     }
+    ],
+    "inputSchema": {
+     "name": "lead_input",
+     "version": 1
+    }
+   }
+  }
+ ]
+}

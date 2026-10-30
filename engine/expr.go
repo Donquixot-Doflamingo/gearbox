@@ -13,6 +13,7 @@ import (
 	"github.com/expr-lang/expr"
 	"github.com/expr-lang/expr/ast"
 	"github.com/expr-lang/expr/builtin"
+	"github.com/expr-lang/expr/types"
 	"github.com/expr-lang/expr/vm"
 )
 
@@ -83,7 +84,14 @@ func envSample() map[string]any {
 
 func buildExprOptions() []expr.Option {
 	opts := []expr.Option{
-		expr.Env(envSample()),
+		expr.Env(types.Map{
+			"input":   types.Any,
+			"request": types.Any,
+			"nodes":   types.TypeOf(map[string]any{}),
+			"out":     types.TypeOf(map[string]any{}),
+			"value":   types.Any,
+			"ctx":     types.TypeOf((*exprCtx)(nil)),
+		}),
 		expr.DisableBuiltin("now"),
 		expr.Timezone("UTC"),
 		expr.Patch(patcher{}),
