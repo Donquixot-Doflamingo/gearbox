@@ -13,7 +13,7 @@
   import VersionsPanel from '$lib/components/VersionsPanel.svelte';
   import { DraftEditor } from '$lib/draft.svelte';
   import { exampleFor, listFields, primaryType, validateDocument } from '$lib/model/schemaTree';
-  import { appHref, qp, setQuery } from '$lib/nav.svelte';
+  import { appHref, qp } from '$lib/nav.svelte';
   import { session } from '$lib/stores/session.svelte';
   import SchemaTreeEditor from './SchemaTreeEditor.svelte';
 
