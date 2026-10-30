@@ -265,7 +265,7 @@ func fetchFile(ctx context.Context, c *client.Client, app, kind, name, which, en
 		case "lookups":
 			f.LookupRows = map[string]json.RawMessage{}
 			var page struct {
-				Items      []struct {
+				Items []struct {
 					Key   string          `json:"key"`
 					Value json.RawMessage `json:"value"`
 				} `json:"items"`
@@ -418,7 +418,7 @@ func cmdValidate(ctx context.Context, o *opts, w io.Writer) error {
 		}
 		for _, f := range files {
 			var v struct {
-				Valid    bool `json:"valid"`
+				Valid    bool                                             `json:"valid"`
 				Problems []struct{ Code, Severity, Path, Message string } `json:"problems"`
 			}
 			err := o.client().Do(ctx, http.MethodPost, client.Path("apps", app, f.Kind, f.Name, "validate"), map[string]any{"spec": f.Spec}, &v)

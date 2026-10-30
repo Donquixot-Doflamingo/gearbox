@@ -269,7 +269,9 @@ func (r resp) Code(t *testing.T) string {
 
 type reqOpt func(*http.Request)
 
-func as(user string) reqOpt { return func(r *http.Request) { r.Header.Set("X-Gearbox-Dev-User", user) } }
+func as(user string) reqOpt {
+	return func(r *http.Request) { r.Header.Set("X-Gearbox-Dev-User", user) }
+}
 func bearerTok(tok string) reqOpt {
 	return func(r *http.Request) { r.Header.Set("Authorization", "Bearer "+tok) }
 }

@@ -2,12 +2,12 @@ package main
 
 import (
 	"bytes"
-	"flag"
-	"io"
-	"log/slog"
 	"context"
 	"crypto/ed25519"
 	"errors"
+	"flag"
+	"io"
+	"log/slog"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
