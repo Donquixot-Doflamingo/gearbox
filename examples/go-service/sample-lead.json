@@ -1,0 +1,5 @@
+{
+  "lead": { "id": "L-1029384", "first_name": "Rahul", "last_name": "Sharma", "phone": "+91-9876543210", "city": "Gurgaon", "source": "app" },
+  "car": { "make": "Maruti", "model": "Swift VXI", "year": 2019, "km": 48200, "price": 525000 },
+  "inspections": [ { "part": "engine", "score": 8 }, { "part": "body", "score": 5 }, { "part": "ac", "score": 5.5 } ]
+}
