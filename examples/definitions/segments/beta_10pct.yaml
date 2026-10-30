@@ -1,0 +1,8 @@
+# Rollout segment: a stable 10% of units (bucket of the unit under salt beta_10pct).
+kind: segments
+name: beta_10pct
+version: 1
+description: Stable 10% of leads for beta features
+spec:
+  type: rollout
+  rollout: { percent: 10, salt: beta_10pct }

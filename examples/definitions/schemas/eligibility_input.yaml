@@ -1,0 +1,18 @@
+# Flat shape produced by the normalize transform and read by the eligibility rules.
+kind: schemas
+name: eligibility_input
+version: 1
+description: Normalized lead fields used by the eligibility rules
+spec:
+  jsonSchema:
+    type: object
+    required: [city, ageYears, km, price, inspectionAvg]
+    properties:
+      city: { type: string }
+      source: { enum: [app, web, partner] }
+      ageYears: { type: integer }
+      km: { type: integer, minimum: 0 }
+      price: { type: number, minimum: 0 }
+      inspectionAvg: { type: number, minimum: 0 }
+  examples:
+    - { city: Gurgaon, source: app, ageYears: 7, km: 48200, price: 525000, inspectionAvg: 8 }
