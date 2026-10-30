@@ -1,0 +1,9 @@
+# Static segment: cities the lead service does not serve.
+kind: segments
+name: blocked_cities
+version: 1
+description: Cities we do not serve
+spec:
+  type: static
+  static: { keyType: string }
+segmentMembers: [Leh, Kargil, Port Blair]

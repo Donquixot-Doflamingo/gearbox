@@ -1,0 +1,41 @@
+# Request input of the lead_routing decision: a used-car lead as sent by the lead service.
+kind: schemas
+name: lead_input
+version: 1
+description: A used-car lead as sent by the lead service
+spec:
+  jsonSchema:
+    type: object
+    required: [lead, car]
+    properties:
+      lead:
+        type: object
+        required: [id, city]
+        properties:
+          id: { type: string }
+          first_name: { type: [string, "null"] }
+          last_name: { type: [string, "null"] }
+          phone: { type: string, x-gearbox-pii: true }
+          city: { type: string }
+          source: { enum: [app, web, partner] }
+      car:
+        type: object
+        required: [year, km, price]
+        properties:
+          make: { type: string }
+          model: { type: string }
+          year: { type: integer, minimum: 1980 }
+          km: { type: integer, minimum: 0 }
+          price: { type: number, minimum: 0 }
+      inspections:
+        type: array
+        maxItems: 50
+        items:
+          type: object
+          required: [part, score]
+          properties:
+            part: { type: string }
+            score: { type: number }
+  examples:
+    - lead: { id: L-1, city: Pune, source: web }
+      car: { year: 2021, km: 12000, price: 690000 }

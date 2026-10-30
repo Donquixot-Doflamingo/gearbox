@@ -1,0 +1,13 @@
+# Dynamic segment: membership is computed at decision time from the attributes the rule passes in.
+kind: segments
+name: metro_premium
+version: 1
+description: Leads in a metro city for cars above 8 lakh
+spec:
+  type: dynamic
+  dynamic:
+    attributesSchema: { name: segment_attrs_city_price, version: 1 }
+    when:
+      all:
+        - { field: city, op: IN, value: [Delhi, Gurgaon, Mumbai, Bengaluru] }
+        - { field: price, op: GT, value: 800000 }
