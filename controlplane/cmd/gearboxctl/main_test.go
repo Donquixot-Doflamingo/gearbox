@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"flag"
 	"io"
 	"log/slog"
 	"context"
@@ -190,6 +191,7 @@ func writeTmpNamed(t *testing.T, name, s string) string {
 }
 
 func TestMain(m *testing.M) {
+	flag.Parse()
 	if !testing.Verbose() {
 		slog.SetDefault(slog.New(slog.NewTextHandler(io.Discard, nil)))
 	}
