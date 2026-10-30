@@ -63,3 +63,12 @@ declare module '@sveltejs/kit' {
   export function redirect(status: number, location: string): never;
   export function error(status: number, message: string): never;
 }
+
+interface ImportMetaEnv {
+  readonly DEV: boolean;
+  readonly PROD: boolean;
+  readonly MODE: string;
+}
+interface ImportMeta {
+  readonly env: ImportMetaEnv;
+}
