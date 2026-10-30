@@ -26,6 +26,7 @@ MIRRORS=(
   "gopkg.in/check.v1 => github.com/go-check/check v0.0.0-20201130134442-10cb98267c6c"
   "cel.dev/expr => github.com/google/cel-spec v0.16.0"
   "cloud.google.com/go/compute/metadata => github.com/googleapis/google-cloud-go/compute/metadata v0.5.0"
+  "google.golang.org/grpc/cmd/protoc-gen-go-grpc => github.com/grpc/grpc-go/cmd/protoc-gen-go-grpc v1.5.1"
 )
 mkdir -p "$ROOT/.gowork-mirrors"
 {

@@ -1,0 +1,14 @@
+# buf configuration for the Gearbox protos.
+# The proto sources live in ../../proto (owned by the contracts lead); this
+# file sits here because proto/ is lead-owned. On a normal machine run, from
+# the repository root:
+#   buf lint proto
+#   buf breaking proto --against '.git#branch=main,subdir=proto'
+#   buf generate proto --template gen/go/buf.gen.yaml
+version: v2
+modules:
+  - path: ../../proto
+lint:
+  use: [STANDARD]
+breaking:
+  use: [FILE]
