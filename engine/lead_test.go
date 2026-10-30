@@ -57,3 +57,15 @@ func TestLeadRoutingDecide(t *testing.T) {
 		t.Fatalf("log fields = %v %v", in, out)
 	}
 }
+
+func TestFallbackHelper(t *testing.T) {
+	snap := mustCompile(t, leadSet(t))
+	r, ok, err := snap.Fallback(context.Background(), Request{Decision: "lead_routing", Input: json.RawMessage(`{}`)})
+	if err != nil || !ok || string(r.Output) != `{"reason":"fallback","route":"manual_review"}` || !r.FallbackUsed || r.Path[0].Outcome != "breaker_open" {
+		t.Fatalf("fallback = %s %v %v", r.Output, ok, err)
+	}
+	m, ok := snap.DecisionMeta("lead_routing", 0)
+	if !ok || m.BudgetMicros != 200 || m.Kind != "graph" || m.LogSample == nil || *m.LogSample != 1 || len(m.LogFields) != 3 {
+		t.Fatalf("meta = %+v", m)
+	}
+}
