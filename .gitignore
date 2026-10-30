@@ -1,0 +1,11 @@
+.gowork-mirrors/
+go.work.sum
+/bin/
+*.test
+*.out
+coverage.*
+node_modules/
+ui/.svelte-kit/
+ui/build/
+.env
+.data/

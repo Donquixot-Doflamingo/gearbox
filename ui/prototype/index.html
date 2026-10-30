@@ -1,0 +1,1047 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<style>:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}[hidden]{display:none!important}img{max-width:100%}</style>
+<title>Gearbox Console</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@75..100,500..800&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+/* Layout: sticky top bar (app + environment) · left nav rail · one working column of panels.
+   Rail turns into a scroll strip under 900px; multi-column panels stack under 860px. */
+:root{
+  --bg:#F1F3F6; --surface:#FFFFFF; --surface-2:#E8ECF1; --line:#D2D9E1; --line-strong:#B5C0CC;
+  --fg:#131920; --muted:#586575; --accent:#2346C4; --accent-fg:#FFFFFF; --accent-soft:#E1E7FA;
+  --ok:#16774A; --ok-soft:#DBF0E4; --warn:#8F5C06; --warn-soft:#F7EBD0; --crit:#B3261B; --crit-soft:#F9E0DC;
+  --t-rules:#2346C4; --t-table:#0B7883; --t-transform:#7A3FB8; --t-switch:#586575; --t-ai:#A05500;
+  --t-output:#16774A; --t-lookup:#8A4A2D; --t-graph:#131920;
+  --code-bg:#F6F8FA; --scrim:rgb(12 16 22 / .45);
+  --shadow:0 1px 2px rgb(19 25 32 / .06), 0 10px 28px rgb(19 25 32 / .10);
+  --f-display:"Archivo","Arial Narrow",system-ui,sans-serif;
+  --f-body:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  --f-mono:"IBM Plex Mono",ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  --r:8px;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#0C0F14; --surface:#141920; --surface-2:#1B2129; --line:#28303A; --line-strong:#3A4451;
+    --fg:#E3E8EE; --muted:#96A2B0; --accent:#8CA6FF; --accent-fg:#0C0F14; --accent-soft:#1C2545;
+    --ok:#55C78B; --ok-soft:#11301F; --warn:#E6AE4A; --warn-soft:#33270E; --crit:#FF8D80; --crit-soft:#3A1612;
+    --t-rules:#8CA6FF; --t-table:#4CC8D2; --t-transform:#C39BF2; --t-switch:#96A2B0; --t-ai:#F0A54A;
+    --t-output:#55C78B; --t-lookup:#E1A07E; --t-graph:#E3E8EE;
+    --code-bg:#10151B; --scrim:rgb(0 0 0 / .6);
+    --shadow:0 1px 2px rgb(0 0 0 / .4), 0 10px 28px rgb(0 0 0 / .4);
+    color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0C0F14; --surface:#141920; --surface-2:#1B2129; --line:#28303A; --line-strong:#3A4451;
+  --fg:#E3E8EE; --muted:#96A2B0; --accent:#8CA6FF; --accent-fg:#0C0F14; --accent-soft:#1C2545;
+  --ok:#55C78B; --ok-soft:#11301F; --warn:#E6AE4A; --warn-soft:#33270E; --crit:#FF8D80; --crit-soft:#3A1612;
+  --t-rules:#8CA6FF; --t-table:#4CC8D2; --t-transform:#C39BF2; --t-switch:#96A2B0; --t-ai:#F0A54A;
+  --t-output:#55C78B; --t-lookup:#E1A07E; --t-graph:#E3E8EE;
+  --code-bg:#10151B; --scrim:rgb(0 0 0 / .6);
+  --shadow:0 1px 2px rgb(0 0 0 / .4), 0 10px 28px rgb(0 0 0 / .4);
+  color-scheme:dark;
+}
+
+*,*::before,*::after{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font:400 14px/1.5 var(--f-body)}
+body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);z-index:25;background:var(--surface)}
+a{color:var(--accent)}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+.skip{position:absolute;left:-9999px}
+.skip:focus{left:16px;top:8px;z-index:60;background:var(--surface);padding:6px 10px;border-radius:6px}
+@media (prefers-reduced-motion: reduce){*{transition:none!important;animation:none!important}}
+
+/* top bar */
+.topbar{position:sticky;top:env(safe-area-inset-top,0px);z-index:20;display:flex;align-items:center;gap:10px 12px;flex-wrap:wrap;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:10px;
+  background:var(--surface);border-bottom:1px solid var(--line)}
+.brand{display:flex;align-items:center;gap:8px;font-family:var(--f-display);font-weight:750;font-size:19px;font-stretch:82%;line-height:1;margin-right:6px;color:var(--fg);text-decoration:none}
+.brand svg{color:var(--accent);flex:none}
+select,input[type=search],input[type=text]{font:inherit;color:var(--fg);background:var(--surface);border:1px solid var(--line-strong);border-radius:6px;padding:6px 10px;min-height:34px}
+input::placeholder{color:var(--muted)}
+.seg{display:inline-flex;border:1px solid var(--line-strong);border-radius:7px;overflow:hidden;flex:none}
+.seg button{font:500 12.5px/1 var(--f-mono);padding:10px 12px;border:0;background:transparent;color:var(--muted);cursor:pointer}
+.seg button+button{border-left:1px solid var(--line-strong)}
+.seg button[aria-checked="true"]{background:var(--fg);color:var(--bg)}
+.seg button[data-env="prod"][aria-checked="true"]{background:var(--crit);color:var(--surface)}
+.search{flex:1 1 200px;min-width:0}
+.search input{width:100%}
+.proto-tag{font:500 11px/1 var(--f-mono);text-transform:uppercase;letter-spacing:.06em;color:var(--warn);background:var(--warn-soft);padding:7px 8px;border-radius:4px;white-space:nowrap}
+.avatar{width:32px;height:32px;border-radius:50%;display:grid;place-items:center;background:var(--accent-soft);color:var(--accent);font:600 12px/1 var(--f-body);flex:none}
+
+/* shell */
+.layout{display:grid;grid-template-columns:196px minmax(0,1fr);gap:28px;max-width:1480px;margin:0 auto;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:20px 64px}
+.rail{position:sticky;top:calc(env(safe-area-inset-top,0px) + 74px);align-self:start;display:flex;flex-direction:column;gap:18px}
+.rail .grp{display:flex;flex-direction:column;gap:1px}
+.rail h3{font:600 11px/1 var(--f-body);text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin:0 0 6px 10px}
+.rail a{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:7px 10px;border-radius:6px;color:var(--fg);text-decoration:none}
+.rail a:hover{background:var(--surface-2)}
+.rail a[aria-current="page"]{background:var(--surface);box-shadow:inset 0 0 0 1px var(--line);font-weight:600}
+.count{font:500 11px/1 var(--f-mono);padding:3px 6px;border-radius:10px;background:var(--surface-2);color:var(--muted)}
+.count.warn{background:var(--warn-soft);color:var(--warn)}
+@media (max-width:900px){
+  .topbar{position:static}
+  .layout{grid-template-columns:minmax(0,1fr);gap:14px;padding-block:12px 56px}
+  .rail{position:static;flex-direction:row;overflow-x:auto;gap:2px;padding-bottom:6px;border-bottom:1px solid var(--line)}
+  .rail .grp{flex-direction:row;gap:2px}
+  .rail h3{display:none}
+  .rail a{white-space:nowrap}
+}
+
+/* page furniture */
+main{min-width:0;display:flex;flex-direction:column;gap:20px}
+main:focus{outline:none}
+.page-head{display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:12px 24px}
+.page-head > div:first-child{min-width:0}
+.eyebrow{margin:0 0 6px;font:500 12px/1.3 var(--f-mono);color:var(--muted)}
+.eyebrow a{color:inherit}
+h1{margin:0;font-family:var(--f-display);font-weight:720;font-size:28px;line-height:1.1;font-stretch:86%;text-wrap:balance;overflow-wrap:anywhere}
+h2{margin:0;font-family:var(--f-display);font-weight:650;font-size:16px;line-height:1.25;font-stretch:92%;text-wrap:balance}
+h3.sub-h{margin:0;font:600 12px/1.2 var(--f-body);text-transform:uppercase;letter-spacing:.07em;color:var(--muted)}
+.sub{margin:6px 0 0;color:var(--muted);max-width:65ch}
+p{margin:0}
+.actions{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.btn{font:500 13px/1 var(--f-body);display:inline-flex;align-items:center;justify-content:center;gap:6px;padding:9px 14px;min-height:36px;border-radius:6px;border:1px solid var(--line-strong);background:var(--surface);color:var(--fg);cursor:pointer;text-decoration:none;white-space:nowrap}
+.btn:hover{background:var(--surface-2)}
+.btn-primary{background:var(--accent);border-color:var(--accent);color:var(--accent-fg)}
+.btn-primary:hover{background:var(--accent);filter:brightness(1.08)}
+.btn-danger{background:var(--crit);border-color:var(--crit);color:var(--surface)}
+.btn-danger:hover{background:var(--crit);filter:brightness(1.08)}
+.btn-sm{padding:6px 10px;min-height:30px;font-size:12.5px}
+.btn[disabled]{opacity:.5;cursor:not-allowed;filter:none}
+.hint{font-size:12.5px;color:var(--muted)}
+.hint.warn{color:var(--warn)}
+.muted{color:var(--muted)}
+.mono{font-family:var(--f-mono);font-size:13px}
+.nowrap{white-space:nowrap}
+
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:16px;min-width:0;display:flex;flex-direction:column;gap:14px}
+.panel > header{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:baseline;gap:4px 12px}
+.grid-2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:20px;align-items:start}
+.grid-side{display:grid;grid-template-columns:minmax(0,300px) minmax(0,1fr);gap:20px;align-items:start}
+.grid-3{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.25fr) minmax(0,1fr);gap:16px;align-items:start}
+@media (max-width:1180px){.grid-3{grid-template-columns:minmax(0,1fr)}}
+@media (max-width:860px){.grid-2,.grid-side{grid-template-columns:minmax(0,1fr)}}
+
+.tiles{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}
+@media (max-width:980px){.tiles{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.tile{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:14px 16px;display:flex;flex-direction:column;gap:7px;min-width:0}
+.tile .label{font:600 11px/1.2 var(--f-body);text-transform:uppercase;letter-spacing:.07em;color:var(--muted);display:flex;gap:6px;align-items:center}
+.tile .value{font-family:var(--f-display);font-weight:720;font-size:28px;line-height:1;font-stretch:86%;font-variant-numeric:tabular-nums}
+.tile .value small{font:500 13px/1 var(--f-mono);color:var(--muted);margin-left:4px}
+.tile .note{font-size:12.5px;color:var(--muted)}
+.dot{width:8px;height:8px;border-radius:50%;background:var(--muted);display:inline-block;flex:none}
+.dot.ok{background:var(--ok)} .dot.warn{background:var(--warn)} .dot.crit{background:var(--crit)} .dot.info{background:var(--accent)}
+
+.tbl-wrap{overflow-x:auto;border:1px solid var(--line);border-radius:var(--r);background:var(--surface)}
+.panel .tbl-wrap{border-radius:6px}
+table{border-collapse:collapse;width:100%;font-variant-numeric:tabular-nums}
+th{font:600 11px/1.2 var(--f-body);text-transform:uppercase;letter-spacing:.06em;color:var(--muted);text-align:left;padding:10px 12px;border-bottom:1px solid var(--line);background:var(--surface-2);white-space:nowrap}
+td{padding:10px 12px;border-bottom:1px solid var(--line);vertical-align:top}
+tbody tr:last-child td{border-bottom:0}
+.num{text-align:right}
+tbody tr.clickable{cursor:pointer}
+tbody tr.clickable:hover td{background:var(--surface-2)}
+tbody tr.selected td{background:var(--accent-soft)}
+td .desc{display:block;color:var(--muted);font-size:12.5px;max-width:42ch}
+td a.name{font:500 13.5px/1.3 var(--f-mono);text-decoration:none}
+td a.name:hover{text-decoration:underline}
+td .name-plain{font:500 13.5px/1.3 var(--f-mono)}
+th.cur, td.cur{background:var(--accent-soft)}
+
+.pill{display:inline-flex;align-items:center;gap:5px;font:500 12px/1 var(--f-body);padding:4px 8px;border-radius:999px;white-space:nowrap}
+.pill-ok{background:var(--ok-soft);color:var(--ok)} .pill-warn{background:var(--warn-soft);color:var(--warn)}
+.pill-crit{background:var(--crit-soft);color:var(--crit)} .pill-info{background:var(--accent-soft);color:var(--accent)}
+.pill-muted{background:var(--surface-2);color:var(--muted)}
+.kind{display:inline-flex;align-items:center;gap:6px;font:500 12px/1 var(--f-mono);color:var(--k);white-space:nowrap}
+.kind::before{content:"";width:8px;height:8px;border-radius:2px;background:var(--k)}
+.ver{display:inline-block;font:500 12px/1 var(--f-mono);padding:4px 6px;border-radius:4px;border:1px solid var(--line);white-space:nowrap}
+.ver.draft{border-style:dashed;color:var(--muted)}
+.ver.live{border-color:var(--crit);color:var(--crit)}
+.chips{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.chip{font:500 12.5px/1 var(--f-body);padding:7px 10px;border-radius:999px;border:1px solid var(--line-strong);background:var(--surface);color:var(--fg);cursor:pointer}
+.chip[aria-pressed="true"]{background:var(--fg);color:var(--bg);border-color:var(--fg)}
+.filters{display:flex;flex-wrap:wrap;gap:10px;align-items:center}
+.filters input{flex:1 1 240px;min-width:0}
+
+pre.code{margin:0;background:var(--code-bg);border:1px solid var(--line);border-radius:6px;padding:12px 14px;overflow-x:auto;font:400 12.5px/1.6 var(--f-mono);tab-size:2;color:var(--fg)}
+.j-key{color:var(--t-rules)} .j-str{color:var(--ok)} .j-num{color:var(--t-ai)} .j-lit{color:var(--t-transform)}
+.diff-add{display:block;background:var(--ok-soft);color:var(--ok)}
+.diff-del{display:block;background:var(--crit-soft);color:var(--crit)}
+.diff-ctx{display:block}
+code.inl{font:400 12.5px/1.4 var(--f-mono);background:var(--surface-2);padding:2px 5px;border-radius:4px;overflow-wrap:anywhere}
+
+.tabs{display:flex;gap:2px;border-bottom:1px solid var(--line);overflow-x:auto}
+.tabs a,.tabs button{padding:10px 12px;border:0;background:none;font:500 13px/1 var(--f-body);color:var(--muted);text-decoration:none;border-bottom:2px solid transparent;margin-bottom:-1px;cursor:pointer;white-space:nowrap;display:inline-flex;gap:7px;align-items:center}
+.tabs a:hover,.tabs button:hover{color:var(--fg)}
+.tabs [aria-current="page"],.tabs [aria-selected="true"]{color:var(--fg);border-bottom-color:var(--accent)}
+
+.kv{display:grid;grid-template-columns:max-content minmax(0,1fr);gap:8px 16px;margin:0}
+.kv dt{color:var(--muted);font-size:12.5px}
+.kv dd{margin:0;min-width:0;overflow-wrap:anywhere}
+
+.list{list-style:none;margin:0;padding:0;display:flex;flex-direction:column}
+.list li{display:flex;gap:12px;align-items:flex-start;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--line)}
+.list li:last-child{border-bottom:0;padding-bottom:0}
+.list li:first-child{padding-top:0}
+.list .main{min-width:0;display:flex;flex-direction:column;gap:3px}
+.list .meta{font-size:12.5px;color:var(--muted)}
+
+/* graph editor */
+.canvas{background-color:var(--surface);background-image:radial-gradient(var(--line) 1px, transparent 1.2px);background-size:18px 18px;border:1px solid var(--line);border-radius:var(--r);overflow-x:auto}
+.graph{display:block;width:100%;min-width:980px;height:auto}
+.g-node{cursor:pointer}
+.g-node rect,.g-node circle{fill:var(--surface);stroke:var(--line-strong);stroke-width:1}
+.g-node:hover rect,.g-node:hover circle{stroke:var(--accent)}
+.g-node.sel rect,.g-node.sel circle{stroke:var(--accent);stroke-width:2;fill:var(--accent-soft)}
+.g-node:focus{outline:none}
+.g-node:focus-visible rect,.g-node:focus-visible circle{stroke:var(--accent);stroke-width:3}
+.g-type{font-family:var(--f-mono);font-size:10.5px;font-weight:500;letter-spacing:.06em;text-transform:uppercase}
+.g-id{font-family:var(--f-mono);font-size:13.5px;font-weight:500;fill:var(--fg)}
+.g-sub{font-family:var(--f-body);font-size:11.5px;fill:var(--muted)}
+.g-edge{fill:none;stroke:var(--line-strong);stroke-width:1.5}
+.g-edge.err{stroke:var(--warn);stroke-dasharray:5 4}
+.g-arrow{fill:var(--line-strong)} .g-arrow-err{fill:var(--warn)}
+.g-label{font-family:var(--f-mono);font-size:11px;fill:var(--muted);paint-order:stroke;stroke:var(--surface);stroke-width:5px;stroke-linejoin:round}
+.g-label.err{fill:var(--warn)}
+.legend{display:flex;flex-wrap:wrap;gap:6px 14px}
+
+.tests{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:2px}
+.tests li{display:grid;grid-template-columns:18px minmax(0,1fr) auto;gap:10px;align-items:start;padding:8px 10px;border-radius:6px}
+.tests li.fail{background:var(--crit-soft)}
+.tests .mark{font:600 13px/1.4 var(--f-mono)}
+.tests .pass .mark{color:var(--ok)} .tests .fail .mark{color:var(--crit)}
+.tests .detail{display:block;font-size:12.5px;color:var(--crit)}
+
+/* rule editor */
+.rule-list{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:4px}
+.rule-list button{all:unset;box-sizing:border-box;width:100%;cursor:pointer;display:grid;grid-template-columns:30px minmax(0,1fr);gap:4px 8px;padding:10px;border-radius:6px;border:1px solid transparent}
+.rule-list button:hover{background:var(--surface-2)}
+.rule-list button[aria-current="true"]{border-color:var(--accent);background:var(--accent-soft)}
+.rule-list button:focus-visible{outline:2px solid var(--accent)}
+.rule-list .rid{font:500 12px/1.5 var(--f-mono);color:var(--muted)}
+.rule-list .rname{font-weight:600}
+.rule-list .rbar{grid-column:2;display:flex;align-items:center;gap:8px;font:400 12px/1 var(--f-mono);color:var(--muted)}
+.bar{height:6px;border-radius:3px;background:var(--surface-2);flex:1;overflow:hidden}
+.bar > i{display:block;height:100%;background:var(--accent);border-radius:3px}
+.cond{display:grid;grid-template-columns:minmax(0,1.6fr) minmax(0,.8fr) minmax(0,1.2fr);gap:8px}
+.cond-cell{font:400 12.5px/1.3 var(--f-mono);border:1px solid var(--line-strong);border-radius:6px;padding:8px 10px;background:var(--surface);min-width:0;overflow-wrap:anywhere}
+.cond-op{color:var(--t-transform);font-weight:500}
+.join{font:600 11px/1 var(--f-mono);color:var(--muted);letter-spacing:.06em}
+@media (max-width:560px){.cond{grid-template-columns:minmax(0,1fr)}}
+
+/* decision table */
+.dt th.out,.dt td.out{border-left:2px solid var(--line-strong)}
+.dt td{font:400 12.5px/1.4 var(--f-mono)}
+.dt tr.hit td{background:var(--ok-soft)}
+.dt tr.hit td:first-child{box-shadow:inset 3px 0 0 var(--ok)}
+.dt .any{color:var(--muted)}
+.form-row{display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end}
+.field{display:flex;flex-direction:column;gap:5px;min-width:0}
+.field label{font:600 11px/1.2 var(--f-body);text-transform:uppercase;letter-spacing:.06em;color:var(--muted)}
+.field input,.field select{width:100%}
+.result-line{font:500 13px/1.5 var(--f-mono);padding:10px 12px;border-radius:6px;background:var(--surface-2)}
+
+/* transform */
+.map-row{display:grid;grid-template-columns:minmax(0,.9fr) minmax(0,1.6fr);gap:6px 10px;padding:9px 0;border-bottom:1px solid var(--line);align-items:start}
+.map-row:last-child{border-bottom:0}
+.map-row .tgt{font:500 12.5px/1.4 var(--f-mono);color:var(--t-transform);overflow-wrap:anywhere}
+.map-row .ex{font:400 12.5px/1.4 var(--f-mono);overflow-wrap:anywhere}
+.map-row .pv{grid-column:2;font:400 12px/1.4 var(--f-mono);color:var(--ok);overflow-wrap:anywhere}
+.map-row .pv::before{content:"→ ";color:var(--muted)}
+
+/* experiments */
+.bucket{display:flex;height:38px;border-radius:6px;overflow:hidden;border:1px solid var(--line)}
+.bucket > div{display:flex;align-items:center;justify-content:center;font:500 11.5px/1 var(--f-mono);min-width:0;overflow:hidden;white-space:nowrap;color:var(--fg)}
+.b-hold{background:var(--surface-2);color:var(--muted)!important}
+.b-a{background:var(--accent-soft)} .b-b{background:var(--ok-soft)} .b-c{background:var(--warn-soft)}
+.scale{display:flex;justify-content:space-between;font:400 11px/1 var(--f-mono);color:var(--muted);margin-top:4px}
+.swatch{width:10px;height:10px;border-radius:2px;display:inline-block;border:1px solid var(--line-strong);flex:none}
+
+/* rollout stepper */
+.stepper{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}
+.stepper li{border:1px solid var(--line);border-radius:6px;padding:10px;display:flex;flex-direction:column;gap:4px;background:var(--surface)}
+.stepper .pct{font-family:var(--f-display);font-weight:720;font-size:22px;font-stretch:86%;line-height:1}
+.stepper .st{font-size:12px;color:var(--muted)}
+.stepper li.done{background:var(--ok-soft);border-color:transparent}
+.stepper li.done .st{color:var(--ok)}
+.stepper li.current{border:2px solid var(--accent);background:var(--accent-soft)}
+.stepper li.current .st{color:var(--accent);font-weight:600}
+@media (max-width:520px){.stepper{grid-template-columns:repeat(2,minmax(0,1fr))}}
+
+/* spread bar */
+.spread{display:flex;height:14px;border-radius:7px;overflow:hidden;background:var(--surface-2)}
+.spread i{display:block;height:100%}
+.spread .s-ok{background:var(--ok)} .spread .s-warn{background:var(--warn)}
+
+/* path trace */
+.trace{list-style:none;margin:0;padding:0;display:flex;flex-direction:column}
+.trace li{display:grid;grid-template-columns:14px minmax(0,1fr) auto;gap:10px;align-items:start;padding:7px 0;position:relative}
+.trace li::before{content:"";position:absolute;left:6px;top:20px;bottom:-8px;width:2px;background:var(--line)}
+.trace li:last-child::before{display:none}
+.trace .nd{width:14px;height:14px;border-radius:3px;margin-top:3px;background:var(--k)}
+.trace .nm{font:500 13px/1.4 var(--f-mono)}
+.trace .oc{display:block;font-size:12.5px;color:var(--muted)}
+.trace .us{font:400 12px/1.4 var(--f-mono);color:var(--muted)}
+
+/* confusion matrix */
+.cm td{font:400 13px/1.2 var(--f-mono);text-align:right}
+.cm td.diag{background:var(--ok-soft);color:var(--ok);font-weight:500}
+.cm th.rh{text-align:left;background:var(--surface)}
+
+/* overlays */
+.toast{position:fixed;right:calc(16px + env(safe-area-inset-right,0px));bottom:calc(16px + env(safe-area-inset-bottom,0px));z-index:40;background:var(--fg);color:var(--bg);padding:11px 14px;border-radius:6px;box-shadow:var(--shadow);max-width:min(380px, calc(100vw - 32px));font-size:13.5px}
+.scrim{position:fixed;inset:0;z-index:50;background:var(--scrim);display:grid;place-items:center;
+  padding:max(16px,env(safe-area-inset-top,0px)) max(16px,env(safe-area-inset-right,0px)) max(16px,env(safe-area-inset-bottom,0px)) max(16px,env(safe-area-inset-left,0px))}
+.dialog{background:var(--surface);border:1px solid var(--line);border-radius:10px;box-shadow:var(--shadow);padding:20px;max-width:460px;width:100%;display:flex;flex-direction:column;gap:14px}
+.dialog .env-callout{font:600 13px/1.4 var(--f-mono);color:var(--crit);background:var(--crit-soft);padding:8px 10px;border-radius:6px}
+.dlg-actions{display:flex;justify-content:flex-end;gap:8px;flex-wrap:wrap}
+
+.chart text{font-family:var(--f-mono);font-size:11px;fill:var(--muted)}
+.chart .grid{stroke:var(--line);stroke-width:1}
+.chart .target{stroke:var(--crit);stroke-width:1;stroke-dasharray:4 4}
+.chart .area{fill:var(--accent-soft)}
+.chart .line{fill:none;stroke:var(--accent);stroke-width:2}
+.chart .end{fill:var(--accent)}
+.chart .endlabel{fill:var(--fg);font-weight:500}
+.chart .targetlabel{fill:var(--crit)}
+.stack{display:flex;flex-direction:column;gap:12px}
+.row{display:flex;flex-wrap:wrap;gap:8px 16px;align-items:center}
+.spacer{flex:1}
+</style>
+
+</head>
+<body>
+<a class="skip" href="#view" id="skip-link">Skip to content</a>
+<header class="topbar" data-component="TopBar">
+  <a class="brand" href="#overview" aria-label="Gearbox overview">
+    <svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8" fill="none" stroke="currentColor" stroke-width="4" stroke-dasharray="3.1 3.18"/><circle cx="12" cy="12" r="6.2" fill="none" stroke="currentColor" stroke-width="2.2"/><circle cx="12" cy="12" r="2" fill="currentColor"/></svg>
+    <span>Gearbox</span>
+  </a>
+  <label for="app-select" class="sr">App</label>
+  <select id="app-select" data-component="AppPicker">
+    <option value="lead-service" selected>lead-service</option>
+    <option value="dealer-portal" disabled>dealer-portal (not in sample)</option>
+    <option value="pricing-api" disabled>pricing-api (not in sample)</option>
+  </select>
+  <div class="seg" role="radiogroup" aria-label="Environment" id="env-seg" data-component="EnvSwitch">
+    <button type="button" role="radio" data-env="dev" aria-checked="false">dev</button>
+    <button type="button" role="radio" data-env="stage" aria-checked="false">stage</button>
+    <button type="button" role="radio" data-env="prod" aria-checked="true">prod</button>
+  </div>
+  <div class="search"><label for="global-search" class="sr">Search</label><input id="global-search" type="search" placeholder="Search decisions or a request ID"></div>
+  <span class="proto-tag">Prototype · sample data</span>
+  <span class="avatar" title="Asha Verma · author">AV</span>
+</header>
+
+<div class="layout">
+  <nav class="rail" id="rail" aria-label="Sections" data-component="NavRail"></nav>
+  <main id="view" tabindex="-1"></main>
+</div>
+
+<div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
+<div class="scrim" id="dialog" hidden>
+  <div class="dialog" role="dialog" aria-modal="true" aria-labelledby="dlg-title" data-component="ConfirmDialog">
+    <h2 id="dlg-title"></h2>
+    <div id="dlg-body" class="stack"></div>
+    <div class="dlg-actions"><button type="button" class="btn" id="dlg-cancel">Cancel</button><button type="button" class="btn btn-danger" id="dlg-ok">Confirm</button></div>
+  </div>
+</div>
+
+<script>
+/* ---------- sample data (becomes typed fixtures + a mock Connect transport in SvelteKit) ---------- */
+const DATA = {
+  app: 'lead-service',
+  decisions: [
+    {name:'lead_routing', kind:'graph', desc:'Route a used-car lead to fast track, standard or review', dev:'draft', stage:'v18', prod:'v17 · 25%', p99:'0.41 ms', cpm:8420, fb:'0.00%', upd:'2 h ago', who:'asha', link:'graph'},
+    {name:'callback_eligibility', kind:'rules', desc:'Can a lead get a callback within the hour', dev:'v23', stage:'v23', prod:'v23', p99:'0.09 ms', cpm:12960, fb:'0.00%', upd:'1 d ago', who:'ravi'},
+    {name:'inspection_pricing_band', kind:'table', desc:'Price band and maximum discount from inspection data', dev:'v10', stage:'v10', prod:'v9', p99:'0.12 ms', cpm:6105, fb:'0.00%', upd:'1 d ago', who:'asha'},
+    {name:'lead_payload_normalize', kind:'transform', desc:'Normalize partner lead payloads to the internal shape', dev:'v6', stage:'v6', prod:'v6', p99:'0.21 ms', cpm:5730, fb:'0.00%', upd:'6 d ago', who:'karan'},
+    {name:'dealer_assignment', kind:'graph', desc:'Pick a dealer for an auction lead (AI node inline, 800 ms budget)', dev:'v5', stage:'v4', prod:'v4', p99:'812 ms', cpm:310, fb:'1.90%', upd:'3 d ago', who:'meera'},
+    {name:'promo_banner_config', kind:'rules', desc:'Banner text and colours per city (migrated dynamic config)', dev:'v42', stage:'v41', prod:'v41', p99:'0.05 ms', cpm:4880, fb:'0.00%', upd:'9 d ago', who:'dev'},
+    {name:'city_serviceability', kind:'lookup', desc:'Is a pincode serviceable, and by which hub', dev:'v3', stage:'v3', prod:'v3', p99:'0.04 ms', cpm:3205, fb:'0.00%', upd:'12 d ago', who:'karan'},
+  ],
+  reviews: [
+    {id:'CR-214', title:'lead_routing v18 · inspection_pricing_band v10', env:'prod', by:'asha', tests:'14/14 passed in stage', age:'3 h'},
+    {id:'CR-213', title:'promo_banner_config v42', env:'stage', by:'dev', tests:'6/6 passed in dev', age:'1 d'},
+  ],
+  releases: [
+    {gen:42, when:'Today 09:12', what:'lead_routing v17 at 25% (v16 at 75%)', who:'ravi', env:'prod', state:'rolling'},
+    {gen:41, when:'Yesterday 17:40', what:'callback_eligibility v23', who:'ravi', env:'prod', state:'done'},
+    {gen:40, when:'Yesterday 15:02', what:'lead_routing v17 at 5%', who:'ravi', env:'prod', state:'done'},
+    {gen:39, when:'Oct 29 22:47', what:'dealer_assignment back to v4 (rollback without review)', who:'meera', env:'prod', state:'breakglass'},
+  ],
+  graph: {
+    nodes: [
+      {id:'normalize', type:'transform', x:16, y:150, sub:'12 fields'},
+      {id:'eligibility', type:'rules', x:216, y:150, sub:'5 rules · first match'},
+      {id:'route', type:'switch', x:416, y:150, sub:'1 case + default'},
+      {id:'price_band', type:'table', x:616, y:30, sub:'4 rows · hit policy first'},
+      {id:'reject', type:'transform', x:616, y:270, sub:'route = "reject"'},
+      {id:'priority', type:'ai', x:816, y:30, sub:'shadow · 1.5 s timeout'},
+      {id:'default_priority', type:'rules', x:816, y:150, sub:'3 rules · first match'},
+      {id:'end', type:'end', x:846, y:270},
+      {id:'output', type:'output', x:1016, y:90, sub:'route, band'},
+    ],
+    edges: [
+      ['normalize','eligibility'],['eligibility','route'],['route','price_band','eligible'],['route','reject','default'],
+      ['price_band','priority'],['priority','output'],['priority','default_priority','onError','err'],['default_priority','output'],['reject','end'],
+    ],
+  },
+  nodeInfo: {
+    normalize: {stats:'p50 9 µs · 0 errors (24 h)', code:'type: transform\ntransform:\n  mode: build\n  fields:\n    leadId:            input.lead.id\n    customer.name:     input.lead.first_name + " " + input.lead.last_name\n    customer.phone:    trimPrefix(input.lead.phone, "+91-")\n    vehicle.ageYears:  ctx.now.Year() - input.car.year\n    inspection.avg:    mean(map(input.inspections, .score))\n    # 7 more fields', open:'transform'},
+    eligibility: {stats:'p50 2 µs · 0 errors (24 h)', code:'type: rules\nrules:\n  mode: first_match\n  rules: [r1 blocked city, r2 too old, r3 odometer,\n          r4 fast lane (25% rollout), r5 everyone else]', open:'rules'},
+    route: {stats:'p50 < 1 µs', code:'type: switch\ncases:\n  - when: nodes.eligibility.eligible\n    next: price_band\ndefault: reject'},
+    price_band: {stats:'p50 3 µs · hit policy first', code:'type: table\ntable: { $ref: tables/price_band.yaml }   # v9\nnext: priority', open:'table'},
+    reject: {stats:'p50 1 µs', code:'type: transform\ntransform:\n  fields:\n    route:  \'"reject"\'\n    reason: nodes.eligibility.reason\nnext: end'},
+    priority: {stats:'shadow · Hub p95 920 ms · agreement 91.4%', code:'type: ai\nai:\n  model: reasoning-default\n  mode: shadow\n  timeout: 1500ms\n  output_schema: { route: enum[fast_track, standard, manual_review] }\nonError: default_priority\nnext: output', open:'ai'},
+    default_priority: {stats:'p50 1 µs · decides while priority is in shadow', code:'type: rules\nrules: { $ref: rules/default_priority.yaml }\nnext: output'},
+    end: {stats:'returns the current node output', code:'next: end'},
+    output: {stats:'p50 3 µs', code:'type: output\nfields:\n  route: nodes.priority?.route ?? nodes.default_priority.route\n  band:  nodes.price_band.band'},
+  },
+  tests: [
+    {name:'fast track · Swift 2019, Gurgaon', ok:true, us:21},
+    {name:'too old · Alto 2011, Pune', ok:true, us:6},
+    {name:'blocked city · Leh', ok:true, us:5},
+    {name:'odometer · 1,82,000 km', ok:true, us:6},
+    {name:'AI timeout falls back to rules', ok:true, us:19},
+    {name:'band A upper edge · ₹8,50,000', ok:false, us:20, detail:'expected band A, got B (row_3). The draft still points at price_band v9; v10 widens band A to ₹8,50,000.'},
+  ],
+  rules: [
+    {id:'r1', name:'Blocked city', hits:0.4, when:'inSegment("blocked_cities", input.lead.city)', then:{eligible:false, reason:'city_not_served'}},
+    {id:'r2', name:'Car too old', hits:6.1, when:'ctx.now.Year() - input.car.year > 12', then:{eligible:false, reason:'car_too_old'}},
+    {id:'r3', name:'Odometer over limit', hits:3.3, when:'input.car.km > 150000', then:{eligible:false, reason:'km_over_limit'}},
+    {id:'r4', name:'Fast lane', hits:22.7, rollout:25, conds:[
+        ['input.car.price','BETWEEN','300000 – 2500000'],
+        ['input.lead.source','IN','"app", "web"'],
+        ['nodes.normalize.inspection.avg','GTE','7']],
+      when:'input.car.price >= 300000 && input.car.price <= 2500000\n  && input.lead.source in ["app", "web"]\n  && nodes.normalize.inspection.avg >= 7', then:{eligible:true, lane:'fast'}},
+    {id:'r5', name:'Everyone else', hits:67.5, when:'true', then:{eligible:true, lane:'standard'}},
+  ],
+  table: {
+    inputs:[['price','input.car.price'],['age','ctx.now.Year() - input.car.year'],['city','input.lead.city']],
+    rows: [
+      {id:'row_1', price:'< 300000', age:'<= 5', city:'-', band:'C', md:5000, hits:11.2},
+      {id:'row_2', price:'[300000..800000]', age:'<= 8', city:'["Gurgaon","Delhi"]', band:'A', md:15000, hits:18.9},
+      {id:'row_3', price:'[300000..800000]', age:'-', city:'-', band:'B', md:10000, hits:41.5},
+      {id:'row_4', price:'-', age:'-', city:'-', band:'D', md:0, hits:28.4},
+    ],
+  },
+  lead: {
+    lead:{id:'L-1029384', first_name:'Rahul', last_name:'Sharma', phone:'+91-9876543210', city:'Gurgaon', source:'app'},
+    car:{make:'Maruti', model:'Swift VXI', year:2019, km:48200, price:525000},
+    inspections:[{part:'engine',score:8},{part:'body',score:5},{part:'ac',score:5.5},{part:'tyres',score:7.5},{part:'interior',score:9.5}],
+  },
+  mappings: [
+    ['leadId','input.lead.id','"L-1029384"'],
+    ['customer.name','input.lead.first_name + " " + input.lead.last_name','"Rahul Sharma"'],
+    ['customer.phone','trimPrefix(input.lead.phone, "+91-")','"9876543210"'],
+    ['customer.city','upper(input.lead.city)','"GURGAON"'],
+    ['vehicle.title','input.car.make + " " + input.car.model','"Maruti Swift VXI"'],
+    ['vehicle.ageYears','ctx.now.Year() - input.car.year','7'],
+    ['vehicle.priceLakh','input.car.price / 100000','5.25'],
+    ['inspection.avg','mean(map(input.inspections, .score))','7.1'],
+    ['inspection.weak','map(filter(input.inspections, .score < 6), .part)','["body", "ac"]'],
+    ['inspection.items','map(input.inspections, ({"part": .part, "ok": .score >= 6}))','[{"part":"engine","ok":true}, …]'],
+  ],
+  lookups: [
+    {name:'city_zone', keys:412, size:'9 KB', ver:'v7', used:'lead_routing, callback_eligibility', upd:'4 d ago'},
+    {name:'pincode_serviceability', keys:19204, size:'1.1 MB', ver:'v12', used:'city_serviceability', upd:'1 d ago'},
+    {name:'sla_hours_by_band', keys:4, size:'< 1 KB', ver:'v2', used:'lead_routing', upd:'21 d ago'},
+  ],
+  cityZone: [['Delhi','NCR-1'],['Gurgaon','NCR-2'],['Noida','NCR-3'],['Mumbai','WEST-1'],['Pune','WEST-2'],['Bengaluru','SOUTH-1'],['Hyderabad','SOUTH-2'],['Chennai','SOUTH-3']],
+  gates: [
+    {name:'new_inspection_flow', state:'on', rollout:'25%', rules:3, upd:'2 d ago'},
+    {name:'ai_priority_shadow', state:'on', rollout:'100%', rules:1, upd:'5 d ago'},
+    {name:'dealer_auction_v2', state:'killed', rollout:'0%', rules:2, upd:'Oct 29'},
+    {name:'whatsapp_followup', state:'off', rollout:'—', rules:0, upd:'12 d ago'},
+  ],
+  segments: [
+    {name:'blocked_cities', kind:'static', members:14, ver:'v5', used:'lead_routing (r1)', upd:'8 d ago'},
+    {name:'vip_dealers', kind:'static', members:1240, ver:'v31', used:'dealer_assignment', upd:'1 d ago'},
+    {name:'beta_testers', kind:'static', members:310, ver:'v8', used:'new_inspection_flow', upd:'3 d ago'},
+    {name:'high_value_pincodes', kind:'static', members:2980, ver:'v4', used:'callback_eligibility', upd:'15 d ago'},
+  ],
+  blockedCities: ['Leh','Kargil','Port Blair','Itanagar','Aizawl','Kohima','Imphal','Gangtok','Shillong','Agartala','Daman','Silvassa','Kavaratti','Diu'],
+  aiNodes: [
+    {id:'priority', decision:'lead_routing', mode:'shadow', model:'reasoning-default', timeout:'1,500 ms', calls:'412,330', status:'Agreement 91.4%'},
+    {id:'dealer_match', decision:'dealer_assignment', mode:'inline', model:'fast-default', timeout:'800 ms', calls:'18,410', status:'Fallback 1.9%'},
+  ],
+  matrix: {labels:['fast_track','standard','manual_review'], rows:[[61204,3880,410],[9915,268402,6120],[220,14930,47249]]},
+  disagreements: [
+    {req:'req_7f2c19', rules:'standard', ai:'fast_track', why:'Low km for age; all parts ≥ 7 except tyres'},
+    {req:'req_7f1a80', rules:'standard', ai:'manual_review', why:'Inspection notes mention flood marks'},
+    {req:'req_7ee042', rules:'manual_review', ai:'standard', why:'Price within band; weak part is only AC'},
+  ],
+  fleet: [
+    {pod:'lead-service-7d9f8c-x2k4p', node:'node-a12', ver:'1.0.0-rc.3', gen:42, sync:'2 s', p99:'0.38 ms', ok:true},
+    {pod:'lead-service-7d9f8c-m81qz', node:'node-a07', ver:'1.0.0-rc.3', gen:42, sync:'2 s', p99:'0.41 ms', ok:true},
+    {pod:'lead-service-7d9f8c-c5wnd', node:'node-b03', ver:'1.0.0-rc.3', gen:42, sync:'3 s', p99:'0.36 ms', ok:true},
+    {pod:'lead-service-7d9f8c-hh0r2', node:'node-b11', ver:'1.0.0-rc.2', gen:41, sync:'6 min', p99:'0.44 ms', ok:false, err:'watch stream reset; polling every 30 s, last poll timed out'},
+    {pod:'lead-service-7d9f8c-t7vbe', node:'node-b11', ver:'1.0.0-rc.2', gen:41, sync:'6 min', p99:'0.43 ms', ok:false, err:'watch stream reset; polling every 30 s, last poll timed out'},
+    {pod:'lead-service-7d9f8c-9qfal', node:'node-c02', ver:'1.0.0-rc.3', gen:42, sync:'1 s', p99:'0.39 ms', ok:true},
+  ],
+  logs: [
+    {t:'09:15:22.103', id:'req_8c1f2a', d:'lead_routing', v:'v17', out:'fast_track', us:21, fb:false},
+    {t:'09:15:22.087', id:'req_8c1e77', d:'lead_routing', v:'v16', out:'standard', us:18, fb:false},
+    {t:'09:15:21.991', id:'req_8c1e02', d:'callback_eligibility', v:'v23', out:'eligible', us:7, fb:false},
+    {t:'09:15:21.950', id:'req_8c1d03', d:'dealer_assignment', v:'v4', out:'dealer_pool_b', us:803112, fb:true},
+    {t:'09:15:21.874', id:'req_8c1c41', d:'lead_routing', v:'v16', out:'reject', us:9, fb:false},
+    {t:'09:15:21.802', id:'req_8c1b9e', d:'promo_banner_config', v:'v41', out:'diwali_ncr', us:4, fb:false},
+  ],
+  traces: {
+    req_8c1f2a: {input:{'car.year':2019,'car.price':525000,'lead.city':'Gurgaon'}, output:{route:'fast_track', band:'A'}, path:[
+      ['normalize','transform','built 12 fields',9],['eligibility','rules','matched r4 (fast lane)',2],['route','switch','case 0 → price_band',0.4],
+      ['price_band','table','matched row_2 → band A',3],['priority','ai','shadow: answer logged later, not used',0.3],['default_priority','rules','matched r1 (lane fast) → fast_track',1],['output','output','route, band',3]]},
+    req_8c1e77: {input:{'car.year':2021,'car.price':690000,'lead.city':'Pune'}, output:{route:'standard', band:'B'}, path:[
+      ['normalize','transform','built 12 fields',8],['eligibility','rules','matched r5 (everyone else)',2],['route','switch','case 0 → price_band',0.4],['price_band','table','matched row_3 → band B',3],['priority','ai','shadow: answer logged later, not used',0.3],['default_priority','rules','matched r2 → standard',1],['output','output','route, band',3]]},
+    req_8c1e02: {input:{'lead.city':'Delhi','lead.hour':11}, output:{eligible:true}, path:[['rules','rules','matched r3',4],['output','output','eligible',2]]},
+    req_8c1d03: {input:{'auction.id':'A-55120','car.make':'Hyundai'}, output:{pool:'dealer_pool_b'}, path:[
+      ['shortlist','rules','matched r1',3],['dealer_match','ai','timed out after 800 ms',800021],['fallback_pool','rules','onError → matched r2',2],['output','output','pool',2]]},
+    req_8c1c41: {input:{'car.year':2011,'car.price':180000,'lead.city':'Pune'}, output:{route:'reject', reason:'car_too_old'}, path:[
+      ['normalize','transform','built 12 fields',7],['eligibility','rules','matched r2 (too old)',1],['route','switch','default → reject',0.4],['reject','transform','route = reject',1]]},
+    req_8c1b9e: {input:{'lead.city':'Noida'}, output:{banner:'diwali_ncr'}, path:[['rules','rules','matched r7',3],['output','output','banner',1]]},
+  },
+  audit: [
+    {t:'Today 09:12', who:'ravi', act:'Published generation 42', res:'lead_routing v17 at 25%', env:'prod'},
+    {t:'Today 09:05', who:'ravi', act:'Approved change request', res:'CR-212', env:'prod'},
+    {t:'Today 06:41', who:'asha', act:'Opened change request', res:'CR-214', env:'prod'},
+    {t:'Yesterday 18:20', who:'meera', act:'Revoked credential', res:'cred_stage_lead_x91', env:'stage'},
+    {t:'Yesterday 16:02', who:'asha', act:'Saved version', res:'lead_routing v18', env:'—'},
+    {t:'Yesterday 11:30', who:'karan', act:'Uploaded lookup', res:'pincode_serviceability v12', env:'—'},
+    {t:'Oct 29 22:47', who:'meera', act:'Rolled back without review', res:'dealer_assignment → v4', env:'prod', flag:true},
+  ],
+  credentials: [
+    {id:'cred_prod_lead_7Hq2', env:'prod', created:'Sep 12 · meera', used:'2 s ago', state:'active'},
+    {id:'cred_stage_lead_Pz80', env:'stage', created:'Oct 30 · meera', used:'5 s ago', state:'active'},
+    {id:'cred_dev_lead_k3Pw', env:'dev', created:'Aug 2 · karan', used:'11 min ago', state:'active'},
+    {id:'cred_stage_lead_x91', env:'stage', created:'Jun 4 · karan', used:'Oct 30', state:'revoked'},
+  ],
+  members: [
+    {name:'Asha Verma', email:'asha@example.com', role:'author'},
+    {name:'Ravi Kumar', email:'ravi@example.com', role:'approver'},
+    {name:'Meera Shah', email:'meera@example.com', role:'admin'},
+    {name:'Karan Mehta', email:'karan@example.com', role:'author'},
+    {name:'Dev Patel', email:'dev@example.com', role:'viewer'},
+  ],
+};
+
+/* ---------- page state ---------- */
+const state = { env:'prod', node:'eligibility', rule:'r4', log:'req_8c1f2a', logFb:false, kind:'all', q:'', tab:'credentials',
+  gen:42, step:1, rollbackDone:false, crStatus:'waiting', price:525000, age:7, city:'Gurgaon', lookupKey:'Gurgaon', segKey:'Leh' };
+const STEPS = [5,25,50,100];
+
+/* ---------- helpers ---------- */
+const $ = (s, r=document) => r.querySelector(s);
+const esc = v => String(v).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const n = v => Number(v).toLocaleString('en-IN');
+const pill = (s, t) => `<span class="pill pill-${s}">${esc(t)}</span>`;
+const kind = t => `<span class="kind" style="--k:var(--t-${t === 'end' ? 'switch' : t})">${esc(t)}</span>`;
+const code = s => `<pre class="code">${esc(s)}</pre>`;
+function json(o){
+  const s = esc(JSON.stringify(o, null, 2));
+  return `<pre class="code">${s
+    .replace(/(&quot;[^&]*?&quot;)(\s*:)/g, '<span class="j-key">$1</span>$2')
+    .replace(/(:\s*|\[\s*|,\s*)(&quot;[^&]*?&quot;)/g, '$1<span class="j-str">$2</span>')
+    .replace(/(:\s*)(-?\d+(?:\.\d+)?)/g, '$1<span class="j-num">$2</span>')
+    .replace(/\b(true|false|null)\b/g, '<span class="j-lit">$1</span>')}</pre>`;
+}
+function head({eyebrow, title, sub, actions=''}){
+  return `<div class="page-head" data-component="PageHeader"><div>${eyebrow ? `<p class="eyebrow">${eyebrow}</p>` : ''}<h1>${esc(title)}</h1>${sub ? `<p class="sub">${sub}</p>` : ''}</div>${actions ? `<div class="actions">${actions}</div>` : ''}</div>`;
+}
+const crumb = (...parts) => [`${esc(DATA.app)} · ${esc(state.env)}`, ...parts].join(' / ');
+function toast(msg){
+  const t = $('#toast'); t.textContent = msg; t.hidden = false;
+  clearTimeout(toast._t); toast._t = setTimeout(() => { t.hidden = true; }, 3600);
+}
+
+/* ---------- navigation ---------- */
+const NAV = [
+  {items:[['overview','Overview']]},
+  {group:'Build', items:[['decisions','Decisions'],['lookups','Lookups'],['experiments','Gates & experiments'],['segments','Segments'],['ai','AI nodes']]},
+  {group:'Ship', items:[['changes','Changes & releases',{n:2}],['fleet','Sidecar fleet',{n:2,warn:true}]]},
+  {group:'Observe', items:[['logs','Decision log'],['audit','Audit']]},
+  {group:'Admin', items:[['manage','Settings']]},
+];
+const PARENT = {graph:'decisions', rules:'decisions', table:'decisions', transform:'decisions'};
+function renderNav(view){
+  const cur = PARENT[view] || view;
+  $('#rail').innerHTML = NAV.map(g => `<div class="grp">${g.group ? `<h3>${g.group}</h3>` : ''}${g.items.map(([id,label,c]) =>
+    `<a href="#${id}"${id === cur ? ' aria-current="page"' : ''}><span>${label}</span>${c ? `<span class="count${c.warn ? ' warn' : ''}">${c.n}</span>` : ''}</a>`).join('')}</div>`).join('');
+}
+
+/* ---------- views ---------- */
+const V = {};
+
+V.overview = () => {
+  const total = DATA.decisions.reduce((a,d) => a + d.cpm, 0);
+  const pts = []; let seed = 7;
+  for (let i = 0; i < 48; i++){ seed = (seed * 9301 + 49297) % 233280; pts.push(0.36 + (seed / 233280) * 0.09 + (i > 30 && i < 35 ? 0.06 : 0)); }
+  pts[47] = 0.41;
+  const X = i => 44 + i * (548 / 47), Y = v => 112 - v * 92;
+  const line = pts.map((v,i) => `${i ? 'L' : 'M'}${X(i).toFixed(1)} ${Y(v).toFixed(1)}`).join(' ');
+  const area = `${line} L${X(47).toFixed(1)} 112 L${X(0)} 112 Z`;
+  return head({eyebrow: crumb(), title:'Overview', sub:'How decisions in this app are behaving right now, and what is waiting on you.',
+      actions:`<a class="btn" href="#changes">Review changes</a><a class="btn btn-primary" href="#decisions">Open decisions</a>`}) +
+  `<section class="tiles" aria-label="Key figures">
+    <div class="tile" data-component="StatTile"><span class="label"><span class="dot ok"></span>Decide p99</span><span class="value">0.41<small>ms</small></span><span class="note">Target under 1 ms · excludes inline AI</span></div>
+    <div class="tile" data-component="StatTile"><span class="label">Calls per minute</span><span class="value">${n(total)}</span><span class="note">7 decisions · 214 sidecars</span></div>
+    <div class="tile" data-component="StatTile"><span class="label"><span class="dot ok"></span>Fallback rate</span><span class="value">0.01<small>%</small></span><span class="note">Last hour · mostly dealer_assignment</span></div>
+    <div class="tile" data-component="StatTile"><span class="label"><span class="dot warn"></span>Sidecars on latest</span><span class="value">212<small>/ 214</small></span><span class="note">2 still on generation 41</span></div>
+  </section>
+  <div class="grid-2">
+    <section class="panel" data-component="LatencyChart">
+      <header><h2>Decide p99, last 24 hours</h2><span class="hint">all sidecars · ${esc(state.env)}</span></header>
+      <svg class="chart" viewBox="0 0 600 140" role="img" aria-label="p99 latency stayed between 0.36 and 0.51 ms, now 0.41 ms, well under the 1 ms target">
+        <line class="target" x1="44" x2="592" y1="${Y(1)}" y2="${Y(1)}"/><text x="38" y="${Y(1)+4}" text-anchor="end">1 ms</text>
+        <text class="targetlabel" x="592" y="${Y(1)-6}" text-anchor="end">target</text>
+        <line class="grid" x1="44" x2="592" y1="${Y(.5)}" y2="${Y(.5)}"/><text x="38" y="${Y(.5)+4}" text-anchor="end">0.5</text>
+        <line class="grid" x1="44" x2="592" y1="112" y2="112"/><text x="38" y="116" text-anchor="end">0</text>
+        <path class="area" d="${area}"/><path class="line" d="${line}"/>
+        <circle class="end" cx="${X(47)}" cy="${Y(.41)}" r="4"/>
+        <text class="endlabel" x="${X(47)-8}" y="${Y(.41)-10}" text-anchor="end">0.41 ms</text>
+        <text x="44" y="132">24 h ago</text><text x="592" y="132" text-anchor="end">now</text>
+      </svg>
+    </section>
+    <section class="panel" data-component="PendingApprovals">
+      <header><h2>Waiting for review</h2><a href="#changes" class="hint">All changes</a></header>
+      <ul class="list">${DATA.reviews.map(r => `<li><div class="main"><a class="mono" href="#changes">${r.id}</a><span>${esc(r.title)}</span><span class="meta">by ${r.by} · ${r.tests} · ${r.age} ago</span></div>${r.env === 'prod' ? pill('crit','to prod') : pill('muted','to ' + r.env)}</li>`).join('')}</ul>
+    </section>
+  </div>
+  <div class="grid-2">
+    <section class="panel" data-component="ReleaseFeed">
+      <header><h2>Recent releases</h2><span class="hint">prod</span></header>
+      <ul class="list">${DATA.releases.map(r => `<li><div class="main"><span>${esc(r.what)}</span><span class="meta">generation ${r.gen} · ${r.when} · ${r.who}</span></div>${r.state === 'rolling' ? pill('info','rolling out') : r.state === 'breakglass' ? pill('warn','no review') : pill('ok','done')}</li>`).join('')}</ul>
+    </section>
+    <section class="panel" data-component="FleetHealth">
+      <header><h2>Sidecar fleet</h2><a href="#fleet" class="hint">Open fleet</a></header>
+      <div class="spread" role="img" aria-label="212 sidecars on generation 42, 2 on generation 41"><i class="s-ok" style="width:${212/214*100}%"></i><i class="s-warn" style="width:${2/214*100}%"></i></div>
+      <div class="row"><span class="row"><span class="dot ok"></span>212 on generation 42</span><span class="row"><span class="dot warn"></span>2 on generation 41</span></div>
+      <p class="hint">Both lagging pods run on node-b11 and lost the change feed 6 minutes ago. They keep answering with generation 41 until the next successful poll.</p>
+    </section>
+  </div>`;
+};
+
+V.decisions = () => {
+  const q = state.q.toLowerCase();
+  const rows = DATA.decisions.filter(d => (state.kind === 'all' || d.kind === state.kind) && (!q || d.name.includes(q) || d.desc.toLowerCase().includes(q)));
+  const envCol = e => e === state.env ? ' class="cur"' : '';
+  return head({eyebrow: crumb(), title:'Decisions', sub:'Every rule set, table, transform and graph this app can call. Versions are immutable; each environment runs the version its last release named.',
+      actions:`<button class="btn" data-act="toast" data-msg="Import reads a Decision YAML and opens it as a draft">Import YAML</button><button class="btn btn-primary" data-act="toast" data-msg="New decision opens an empty graph with an input schema step">New decision</button>`}) +
+  `<div class="filters" data-component="DecisionFilters">
+     <label for="dec-q" class="sr">Filter decisions</label><input id="dec-q" type="search" placeholder="Filter by name or description" value="${esc(state.q)}" data-input="q">
+     <div class="chips" role="group" aria-label="Kind">${['all','graph','rules','table','transform','lookup'].map(k => `<button type="button" class="chip" data-act="kind" data-k="${k}" aria-pressed="${state.kind === k}">${k}</button>`).join('')}</div>
+   </div>
+   <div class="tbl-wrap" data-component="DecisionTable"><table>
+     <thead><tr><th>Decision</th><th>Kind</th><th${envCol('dev')}>dev</th><th${envCol('stage')}>stage</th><th${envCol('prod')}>prod</th><th class="num">p99</th><th class="num">Calls/min</th><th class="num">Fallback</th><th>Updated</th></tr></thead>
+     <tbody>${rows.map(d => `<tr>
+       <td>${d.link ? `<a class="name" href="#${d.link}">${d.name}</a>` : `<span class="name-plain">${d.name}</span>`}<span class="desc">${esc(d.desc)}</span></td>
+       <td>${kind(d.kind)}</td>
+       ${['dev','stage','prod'].map(e => `<td${envCol(e)}><span class="ver${d[e] === 'draft' ? ' draft' : ''}">${esc(d[e])}</span></td>`).join('')}
+       <td class="num mono">${d.p99}</td><td class="num mono">${n(d.cpm)}</td><td class="num mono">${d.fb}</td>
+       <td class="nowrap"><span class="muted">${d.upd} · ${d.who}</span></td></tr>`).join('') || `<tr><td colspan="9" class="muted">No decision matches “${esc(state.q)}”. Clear the filter to see all 7.</td></tr>`}</tbody>
+   </table></div>
+   <p class="hint">In this prototype only <a href="#graph">lead_routing</a> opens; the other rows show list behaviour.</p>`;
+};
+
+function decHead(){
+  const failing = DATA.tests.filter(t => !t.ok).length;
+  return head({eyebrow:`${crumb()} / <a href="#decisions">decisions</a>`, title:'lead_routing',
+    sub:`Route a used-car lead to fast track, standard or review. <span class="row" style="display:inline-flex;margin-top:8px" data-component="VersionBar"><span class="ver draft">editing draft · based on v18</span><span class="ver">stage v18</span><span class="ver live">prod v17 at 25% · v16 at 75%</span></span>`,
+    actions:`<button class="btn" data-act="toast" data-msg="Valid: no cycles, every path reaches output, types match the input schema">Validate</button>
+      <button class="btn" data-act="toast" data-msg="Ran 6 tests: 5 passed, 1 failed (band A upper edge)">Run tests</button>
+      <button class="btn btn-primary" ${failing ? 'disabled aria-describedby="submit-why"' : ''}>Save as v19</button>
+      ${failing ? `<span id="submit-why" class="hint warn">${failing} test failing</span>` : ''}`}) +
+  `<nav class="tabs" aria-label="Decision parts" data-component="DecisionTabs">${[['graph','Graph'],['rules','eligibility · rules'],['table','price_band · table'],['transform','normalize · transform']].map(([h,l]) => `<a href="#${h}"${location.hash.slice(1) === h || (!location.hash && h === 'graph') ? ' aria-current="page"' : ''}>${l}</a>`).join('')}</nav>`;
+}
+
+function graphSVG(){
+  const W = 150, H = 64, N = Object.fromEntries(DATA.graph.nodes.map(d => [d.id, d]));
+  const box = d => d.type === 'end' ? {l:d.x+12, r:d.x+48, t:d.y+14, b:d.y+50, cx:d.x+30, cy:d.y+32} : {l:d.x, r:d.x+W, t:d.y, b:d.y+H, cx:d.x+W/2, cy:d.y+H/2};
+  const edges = DATA.graph.edges.map(([a,b,label,cls]) => {
+    const A = box(N[a]), B = box(N[b]); let d, lx, ly;
+    if (Math.abs(A.cx - B.cx) < 5){ d = `M${A.cx} ${A.b} L${B.cx} ${B.t - 4}`; lx = A.cx + 10; ly = (A.b + B.t)/2 + 4; }
+    else { const x1 = A.r, y1 = A.cy, x2 = B.l - 4, y2 = B.cy, m = (x2 - x1)/2; d = `M${x1} ${y1} C${x1+m} ${y1}, ${x2-m} ${y2}, ${x2} ${y2}`; lx = (x1+x2)/2; ly = (y1+y2)/2 + 4; }
+    return `<path class="g-edge${cls ? ' err' : ''}" d="${d}" marker-end="url(#${cls ? 'arr-err' : 'arr'})"/>` + (label ? `<text class="g-label${cls ? ' err' : ''}" x="${lx}" y="${ly}" text-anchor="${Math.abs(A.cx - B.cx) < 5 ? 'start' : 'middle'}">${label}</text>` : '');
+  }).join('');
+  const nodes = DATA.graph.nodes.map(d => {
+    const sel = state.node === d.id ? ' sel' : '';
+    const label = `${d.id}, ${d.type} node`;
+    if (d.type === 'end') return `<g class="g-node${sel}" tabindex="0" role="button" aria-label="${label}" data-node="${d.id}"><circle cx="${d.x+30}" cy="${d.y+32}" r="18"/><text class="g-sub" x="${d.x+30}" y="${d.y+36}" text-anchor="middle">end</text></g>`;
+    return `<g class="g-node${sel}" tabindex="0" role="button" aria-label="${label}" data-node="${d.id}"><rect x="${d.x}" y="${d.y}" width="${W}" height="${H}" rx="8"/>
+      <text class="g-type" x="${d.x+12}" y="${d.y+19}" style="fill:var(--t-${d.type})">${d.type}</text>
+      <text class="g-id" x="${d.x+12}" y="${d.y+38}">${d.id}</text><text class="g-sub" x="${d.x+12}" y="${d.y+54}">${esc(d.sub)}</text></g>`;
+  }).join('');
+  return `<svg class="graph" viewBox="0 0 1182 352" role="group" aria-label="lead_routing graph, 9 nodes">
+    <defs><marker id="arr" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="8" markerHeight="8" orient="auto"><path class="g-arrow" d="M0 0 L8 4 L0 8 Z"/></marker>
+    <marker id="arr-err" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="8" markerHeight="8" orient="auto"><path class="g-arrow-err" d="M0 0 L8 4 L0 8 Z"/></marker></defs>
+    ${edges}${nodes}</svg>`;
+}
+
+V.graph = () => {
+  const node = DATA.graph.nodes.find(d => d.id === state.node), info = DATA.nodeInfo[state.node];
+  const passed = DATA.tests.filter(t => t.ok).length;
+  return decHead() +
+  `<section class="canvas" data-component="GraphCanvas" aria-describedby="graph-help">${graphSVG()}</section>
+   <div class="row"><div class="legend">${['transform','rules','switch','table','ai','output'].map(kind).join('')}</div><span class="spacer"></span><span class="hint" id="graph-help">Select a node to inspect it. Dashed amber edges run when the node fails.</span></div>
+   <div class="grid-2">
+     <section class="panel" data-component="NodeInspector" aria-live="polite">
+       <header><h2><span class="mono">${node.id}</span></h2>${kind(node.type)}</header>
+       <p class="hint">${esc(info.stats)}</p>
+       ${code(info.code)}
+       ${info.open ? `<div class="actions"><a class="btn btn-sm" href="#${info.open}">Open ${node.type} editor</a></div>` : ''}
+     </section>
+     <section class="panel" data-component="TestPanel">
+       <header><h2>Test cases</h2><span class="hint">${passed} of ${DATA.tests.length} pass on the draft</span></header>
+       <ul class="tests">${DATA.tests.map(t => `<li class="${t.ok ? 'pass' : 'fail'}"><span class="mark" aria-hidden="true">${t.ok ? '✓' : '✕'}</span><span>${esc(t.name)}${t.detail ? `<span class="detail">${esc(t.detail)}</span>` : ''}</span><span class="mono muted">${t.us} µs</span></li>`).join('')}</ul>
+       <div class="actions"><button class="btn btn-sm" data-act="toast" data-msg="New test case starts from the last logged input, with PII fields removed">Add test from a logged request</button></div>
+     </section>
+   </div>`;
+};
+
+V.rules = () => {
+  const r = DATA.rules.find(x => x.id === state.rule);
+  const builder = r.conds ? `<div class="stack" data-component="ConditionBuilder"><h3 class="sub-h">When all of</h3>${r.conds.map((c,i) => `${i ? '<span class="join">AND</span>' : ''}<div class="cond"><span class="cond-cell">${esc(c[0])}</span><span class="cond-cell cond-op">${c[1]}</span><span class="cond-cell">${esc(c[2])}</span></div>`).join('')}
+      <button class="btn btn-sm" style="align-self:flex-start" data-act="toast" data-msg="Adds a row: field, operator (35 + segment and gate operators), value">Add condition</button></div>` : '';
+  return decHead() +
+  `<div class="grid-side">
+    <section class="panel" data-component="RuleList">
+      <header><h2>eligibility</h2><span class="hint">first match · 5 rules</span></header>
+      <ol class="rule-list">${DATA.rules.map(x => `<li><button type="button" data-act="rule" data-id="${x.id}" aria-current="${x.id === state.rule}"><span class="rid">${x.id}</span><span class="rname">${esc(x.name)}</span><span class="rbar"><span class="bar" aria-hidden="true"><i style="width:${x.hits}%"></i></span>${x.hits}%</span></button></li>`).join('')}</ol>
+      <p class="hint">Bars show the share of prod calls each rule matched in the last 24 h. Drag to reorder; order is priority.</p>
+    </section>
+    <section class="panel" data-component="RuleEditor">
+      <header><h2><span class="mono">${r.id}</span> · ${esc(r.name)}</h2>${r.rollout ? pill('info', `rollout ${r.rollout}% of units`) : pill('muted','all units')}</header>
+      ${builder}
+      <div class="stack" data-component="ExprEditor"><h3 class="sub-h">${r.conds ? 'Compiles to' : 'When (Expr)'}</h3>${code(r.when)}</div>
+      <div class="stack" data-component="ThenEditor"><h3 class="sub-h">Then return</h3>${json(r.then)}</div>
+      ${r.rollout ? `<p class="hint">Units with <code class="inl">bucket("eligibility.r4") &lt; ${r.rollout * 100}</code> match this rule; everyone else falls through to r5. Buckets run 0–9999 and use murmur3 on the unit ID, so a unit always lands in the same bucket.</p>` : ''}
+      <div class="actions"><button class="btn btn-sm" data-act="toast" data-msg="Type check passed against schemas/lead.json">Check types</button><button class="btn btn-sm" data-act="toast" data-msg="Rule matched the selected test input">Try with test input</button></div>
+    </section>
+  </div>`;
+};
+
+function cellMatch(cell, v){
+  cell = cell.trim();
+  if (cell === '-') return true;
+  let m;
+  if ((m = cell.match(/^(<=|>=|<|>)\s*(-?\d+(?:\.\d+)?)$/))){ const x = +m[2]; return m[1] === '<' ? v < x : m[1] === '<=' ? v <= x : m[1] === '>' ? v > x : v >= x; }
+  if ((m = cell.match(/^\[(-?\d+)\.\.(-?\d+)\]$/))) return v >= +m[1] && v <= +m[2];
+  if (cell.startsWith('[')) { try { return JSON.parse(cell).includes(v); } catch { return false; } }
+  return String(v) === cell.replace(/^"|"$/g, '');
+}
+const evalTable = () => DATA.table.rows.find(r => cellMatch(r.price, state.price) && cellMatch(r.age, state.age) && cellMatch(r.city, state.city));
+
+V.table = () => {
+  const hit = evalTable();
+  const cell = c => c === '-' ? '<span class="any">any</span>' : esc(c);
+  return decHead() +
+  `<section class="panel" data-component="DecisionTableEditor">
+     <header><h2>price_band</h2><div class="row"><label for="hp" class="hint">Hit policy</label><select id="hp"><option selected>first</option><option>unique</option><option>collect</option><option>priority</option></select>
+     <button class="btn btn-sm" data-act="toast" data-msg="CSV import replaces rows in the draft; columns must match">Import CSV</button><button class="btn btn-sm" data-act="toast" data-msg="Exported price_band v9 as CSV">Export</button></div></header>
+     <div class="tbl-wrap"><table class="dt">
+       <thead><tr><th>Row</th>${DATA.table.inputs.map(([nm,ex]) => `<th title="${esc(ex)}">${nm}<br><span class="mono" style="text-transform:none;letter-spacing:0;font-weight:400">${esc(ex)}</span></th>`).join('')}<th class="out">→ band</th><th>max_discount</th><th class="num">Hits 24 h</th></tr></thead>
+       <tbody>${DATA.table.rows.map(r => `<tr class="${hit && hit.id === r.id ? 'hit' : ''}"><td>${r.id}</td><td>${cell(r.price)}</td><td>${cell(r.age)}</td><td>${cell(r.city)}</td><td class="out">${r.band}</td><td>${n(r.md)}</td><td class="num">${r.hits}%</td></tr>`).join('')}</tbody>
+     </table></div>
+     <p class="hint">Cells: <code class="inl">-</code> any · <code class="inl">&lt; 300000</code> · <code class="inl">[a..b]</code> inclusive range · a JSON list means one of · anything else is an Expr expression where <code class="inl">value</code> is the column value.</p>
+   </section>
+   <section class="panel" data-component="TableTester">
+     <header><h2>Try an input</h2><span class="hint">evaluated in the page with the same cell rules</span></header>
+     <div class="form-row">
+       <div class="field"><label for="t-price">price (₹)</label><input id="t-price" type="text" inputmode="numeric" value="${state.price}" data-input="price"></div>
+       <div class="field"><label for="t-age">age (years)</label><input id="t-age" type="text" inputmode="numeric" value="${state.age}" data-input="age"></div>
+       <div class="field"><label for="t-city">city</label><input id="t-city" type="text" value="${esc(state.city)}" data-input="city"></div>
+     </div>
+     <p class="result-line" id="table-result" aria-live="polite">${hit ? `matched ${hit.id} → band ${hit.band}, max_discount ${n(hit.md)}` : 'no row matched; the node returns its default'}</p>
+   </section>`;
+};
+
+V.transform = () => decHead() +
+  `<div class="grid-3">
+     <section class="panel" data-component="JsonPreview"><header><h2>Input</h2><span class="hint">test case: lead-1029384.json</span></header>${json(DATA.lead)}</section>
+     <section class="panel" data-component="FieldMapList"><header><h2>normalize</h2><span class="hint">mode build · 10 of 12 fields shown</span></header>
+       <div>${DATA.mappings.map(([t,e,v]) => `<div class="map-row"><span class="tgt">${esc(t)}</span><span class="ex">${esc(e)}</span><span class="pv">${esc(v)}</span></div>`).join('')}</div>
+       <div class="actions"><button class="btn btn-sm" data-act="toast" data-msg="Adds a target path and an expression; autocomplete reads schemas/lead.json">Add field</button><span class="hint">defaults: customer.country = "IN"</span></div>
+     </section>
+     <section class="panel" data-component="JsonPreview"><header><h2>Output</h2><span class="hint">≈ 16 µs</span></header>${json({leadId:'L-1029384', customer:{name:'Rahul Sharma', phone:'9876543210', city:'GURGAON', country:'IN'}, vehicle:{title:'Maruti Swift VXI', ageYears:7, priceLakh:5.25}, inspection:{avg:7.1, weak:['body','ac']}})}</section>
+   </div>`;
+
+V.lookups = () => {
+  const hit = DATA.cityZone.find(([k]) => k.toLowerCase() === state.lookupKey.trim().toLowerCase());
+  return head({eyebrow: crumb(), title:'Lookups', sub:'Key to value tables shipped inside the bundle. Use them with a lookup node or <code class="inl">lookup("city_zone", input.lead.city)</code> in any expression.',
+    actions:`<button class="btn btn-primary" data-act="toast" data-msg="Upload a CSV with a key column; a new version is created as a draft">Upload CSV</button>`}) +
+  `<div class="tbl-wrap" data-component="LookupTable"><table><thead><tr><th>Table</th><th class="num">Keys</th><th class="num">Size</th><th>Version</th><th>Used by</th><th>Updated</th></tr></thead>
+    <tbody>${DATA.lookups.map(l => `<tr><td><span class="name-plain">${l.name}</span></td><td class="num mono">${n(l.keys)}</td><td class="num mono">${l.size}</td><td><span class="ver">${l.ver}</span></td><td class="mono">${l.used}</td><td class="muted nowrap">${l.upd}</td></tr>`).join('')}</tbody></table></div>
+   <div class="grid-2">
+     <section class="panel" data-component="KeyPreview"><header><h2>city_zone · first 8 keys</h2><span class="hint">v7</span></header>
+       <div class="tbl-wrap"><table><thead><tr><th>key</th><th>value</th></tr></thead><tbody>${DATA.cityZone.map(([k,v]) => `<tr><td class="mono">${k}</td><td class="mono">${v}</td></tr>`).join('')}</tbody></table></div></section>
+     <section class="panel" data-component="KeyCheck"><header><h2>Check a key</h2></header>
+       <div class="field"><label for="lk">city</label><input id="lk" type="text" value="${esc(state.lookupKey)}" data-input="lookupKey"></div>
+       <p class="result-line" id="lookup-result" aria-live="polite">${hit ? `lookup("city_zone", "${esc(hit[0])}") = "${hit[1]}"` : `not in the preview rows; the full table has ${n(412)} keys`}</p>
+       <p class="hint">Bundles are limited to 64 MB per app. Very large tables belong in your own service; send the looked-up value in the input instead.</p></section>
+   </div>`;
+};
+
+V.experiments = () =>
+  head({eyebrow: crumb(), title:'Gates & experiments', sub:'Same bucketing as before the migration (murmur3, salt per gate or experiment), so existing users keep their assignments.',
+    actions:`<button class="btn" data-act="toast" data-msg="New gate starts off, with no rules">New gate</button><button class="btn btn-primary" data-act="toast" data-msg="New experiment starts as a draft">New experiment</button>`}) +
+  `<section class="stack"><h2>Gates</h2><div class="tbl-wrap" data-component="GateTable"><table><thead><tr><th>Gate</th><th>State</th><th class="num">Rollout</th><th class="num">Rules</th><th>Updated</th><th></th></tr></thead>
+    <tbody>${DATA.gates.map(g => `<tr><td><span class="name-plain">${g.name}</span></td><td>${g.state === 'on' ? pill('ok','on') : g.state === 'killed' ? pill('crit','kill switch on') : pill('muted','off')}</td><td class="num mono">${g.rollout}</td><td class="num mono">${g.rules}</td><td class="muted nowrap">${g.upd}</td>
+      <td class="num">${g.state === 'on' ? `<button class="btn btn-sm" data-act="confirm" data-kind="kill" data-name="${g.name}">Kill switch</button>` : ''}</td></tr>`).join('')}</tbody></table></div></section>
+   <section class="panel" data-component="ExperimentCard">
+     <header><h2><span class="mono">callback_timing</span></h2><div class="row">${pill('ok','running · day 9')}<span class="hint">layer lead_followup · 60% of layer traffic</span></div></header>
+     <p>Does calling back sooner raise inspection bookings? Unit: <code class="inl">lead.id</code>. Primary metric: inspection booked within 48 h.</p>
+     <div data-component="BucketBar"><div class="bucket" role="img" aria-label="Buckets 0 to 9999: holdout 5 percent, control 47.5, wait_15m 23.75, wait_5m 23.75">
+        <div class="b-hold" style="flex:500">5%</div><div class="b-a" style="flex:4750">control</div><div class="b-b" style="flex:2375">wait_15m</div><div class="b-c" style="flex:2375">wait_5m</div></div>
+        <div class="scale"><span>bucket 0</span><span>9 999</span></div></div>
+     <div class="tbl-wrap"><table><thead><tr><th>Variant</th><th>Buckets</th><th class="num">Share</th><th>Parameters</th><th class="num">Units so far</th></tr></thead><tbody>
+       <tr><td><span class="row"><i class="swatch b-hold"></i>holdout</span></td><td class="mono">0–499</td><td class="num mono">5%</td><td class="mono muted">not in experiment</td><td class="num mono">${n(9412)}</td></tr>
+       <tr><td><span class="row"><i class="swatch b-a"></i>control</span></td><td class="mono">500–5249</td><td class="num mono">47.5%</td><td class="mono">{"delay_min": 60}</td><td class="num mono">${n(89210)}</td></tr>
+       <tr><td><span class="row"><i class="swatch b-b"></i>wait_15m</span></td><td class="mono">5250–7624</td><td class="num mono">23.75%</td><td class="mono">{"delay_min": 15}</td><td class="num mono">${n(44730)}</td></tr>
+       <tr><td><span class="row"><i class="swatch b-c"></i>wait_5m</span></td><td class="mono">7625–9999</td><td class="num mono">23.75%</td><td class="mono">{"delay_min": 5}</td><td class="num mono">${n(44602)}</td></tr>
+     </tbody></table></div>
+     <div class="actions"><button class="btn btn-sm" data-act="confirm" data-kind="stop" data-name="callback_timing">Stop experiment</button><span class="hint">Results are read in your analytics tool from the assignment log.</span></div>
+   </section>`;
+
+V.segments = () => {
+  const inSeg = DATA.blockedCities.some(c => c.toLowerCase() === state.segKey.trim().toLowerCase());
+  return head({eyebrow: crumb(), title:'Segments', sub:'Static member lists shipped in the bundle. Rules use them with <code class="inl">inSegment("name", value)</code> or the IN_SEGMENT operator.',
+    actions:`<button class="btn btn-primary" data-act="toast" data-msg="Upload a CSV with one member per line">Upload members</button>`}) +
+  `<div class="tbl-wrap" data-component="SegmentTable"><table><thead><tr><th>Segment</th><th>Type</th><th class="num">Members</th><th>Version</th><th>Used by</th><th>Updated</th></tr></thead>
+    <tbody>${DATA.segments.map(s => `<tr><td><span class="name-plain">${s.name}</span></td><td>${pill('muted', s.kind)}</td><td class="num mono">${n(s.members)}</td><td><span class="ver">${s.ver}</span></td><td class="mono">${s.used}</td><td class="muted nowrap">${s.upd}</td></tr>`).join('')}</tbody></table></div>
+   <section class="panel" data-component="MembershipCheck"><header><h2>Is it in blocked_cities?</h2><span class="hint">v5 · ${DATA.blockedCities.length} members</span></header>
+     <div class="field" style="max-width:320px"><label for="sk">city</label><input id="sk" type="text" value="${esc(state.segKey)}" data-input="segKey"></div>
+     <p class="result-line" id="seg-result" aria-live="polite">${inSeg ? `inSegment("blocked_cities", "${esc(state.segKey.trim())}") = true` : `inSegment("blocked_cities", "${esc(state.segKey.trim())}") = false`}</p>
+     <p class="hint">Members: ${DATA.blockedCities.join(', ')}.</p></section>`;
+};
+
+V.ai = () => {
+  const m = DATA.matrix, total = m.rows.flat().reduce((a,b) => a+b, 0), agree = m.rows.reduce((a,r,i) => a + r[i], 0);
+  return head({eyebrow: crumb(), title:'AI nodes', sub:'Each AI node makes one call to the Integration Hub and must return JSON that matches its schema. Timeouts, errors and invalid answers take the node’s fallback path.'}) +
+  `<div class="tbl-wrap" data-component="AiNodeTable"><table><thead><tr><th>Node</th><th>Decision</th><th>Mode</th><th>Model alias</th><th class="num">Timeout</th><th class="num">Calls 7 d</th><th>Status</th></tr></thead>
+    <tbody>${DATA.aiNodes.map(a => `<tr><td><span class="name-plain">${a.id}</span></td><td class="mono">${a.decision}</td><td>${a.mode === 'shadow' ? pill('info','shadow') : pill('warn','inline')}</td><td class="mono">${a.model}</td><td class="num mono">${a.timeout}</td><td class="num mono">${a.calls}</td><td>${esc(a.status)}</td></tr>`).join('')}</tbody></table></div>
+   <section class="tiles" aria-label="Shadow report for priority">
+     <div class="tile"><span class="label">Agreement with rules</span><span class="value">${(agree/total*100).toFixed(1)}<small>%</small></span><span class="note">priority · lead_routing v17 · 7 days</span></div>
+     <div class="tile"><span class="label">Hub latency</span><span class="value">380<small>ms p50</small></span><span class="note">920 ms p95 · caller waits 0 ms</span></div>
+     <div class="tile"><span class="label"><span class="dot warn"></span>Timeouts</span><span class="value">0.8<small>%</small></span><span class="note">over the 1,500 ms budget</span></div>
+     <div class="tile"><span class="label">Schema failures</span><span class="value">0.2<small>%</small></span><span class="note">answer did not match output_schema</span></div>
+   </section>
+   <div class="grid-2">
+     <section class="panel" data-component="ShadowReport"><header><h2>Rules vs AI, last 7 days</h2><span class="hint">${n(total)} calls</span></header>
+       <div class="tbl-wrap"><table class="cm"><thead><tr><th>rules said ↓ · AI said →</th>${m.labels.map(l => `<th class="num">${l}</th>`).join('')}</tr></thead>
+       <tbody>${m.rows.map((r,i) => `<tr><th class="rh mono" scope="row">${m.labels[i]}</th>${r.map((v,j) => `<td class="${i === j ? 'diag' : ''}">${n(v)}</td>`).join('')}</tr>`).join('')}</tbody></table></div>
+       <p class="hint">Biggest gap: 14,930 leads the rules sent to manual review that the model would route as standard.</p>
+       <div class="actions"><button class="btn btn-sm btn-primary" data-act="confirm" data-kind="inline">Make inline as a new version</button></div></section>
+     <section class="panel" data-component="Disagreements"><header><h2>Sample disagreements</h2><span class="hint">PII removed</span></header>
+       <ul class="list">${DATA.disagreements.map(d => `<li><div class="main"><a class="mono" href="#logs">${d.req}</a><span>rules <b class="mono">${d.rules}</b> · AI <b class="mono">${d.ai}</b></span><span class="meta">${esc(d.why)}</span></div></li>`).join('')}</ul></section>
+   </div>
+   <section class="panel" data-component="PromptEditor"><header><h2>priority · prompt and schema</h2><span class="hint">pinned in lead_routing v17; edits create a new version</span></header>
+     <div class="grid-2">${code(`vars:            # the only values the prompt may use
+  car:  input.car.make + " " + input.car.model
+  year: input.car.year
+  avg:  nodes.normalize.inspection.avg
+  weak: nodes.normalize.inspection.weak
+  city: input.lead.city
+system: |
+  You rate follow-up priority for used-car leads.
+  Answer only with the JSON schema.
+user: |
+  Car: {{ car }}, {{ year }}. Inspection average: {{ avg }}.
+  Weak parts: {{ weak }}. City: {{ city }}.`)}${json({type:'object', required:['route','reason'], properties:{route:{enum:['fast_track','standard','manual_review']}, reason:{type:'string', maxLength:200}}})}</div>
+     <p class="hint">Calls go to the Integration Hub at <code class="inl">POST /v1/ai/completions</code>. That contract is a placeholder until the Hub team shares theirs. A var that depends on a field marked <code class="inl">x-gearbox-pii</code> (phone, email) fails publish.</p></section>`;
+};
+
+V.changes = () => {
+  const s = state.step, rel = state.rollbackDone;
+  const cr = state.crStatus;
+  const diff = [
+    ['ctx','  - id: price_band'],['ctx','    type: table'],
+    ['del','    table: { $ref: tables/price_band.yaml }   # v9'],['add','    table: { $ref: tables/price_band.yaml }   # v10'],
+    ['ctx','  - id: priority'],['ctx','    type: ai'],
+    ['del','    timeout: 1500ms'],['add','    timeout: 1200ms'],
+    ['ctx','tables/price_band.yaml (v9 → v10)'],
+    ['del','  - { id: row_2, when: { price: "[300000..800000]", age: "<= 8", city: ["Gurgaon","Delhi"] }, then: { band: A } }'],
+    ['add','  - { id: row_2, when: { price: "[300000..850000]", age: "<= 8", city: ["Gurgaon","Delhi"] }, then: { band: A } }'],
+  ];
+  return head({eyebrow: crumb(), title:'Changes & releases', sub:'A change request bundles versions for one environment. Publishing builds a signed bundle with a new generation number; rollouts and rollbacks are new generations too.'}) +
+  `<section class="panel" data-component="ChangeRequest">
+     <header><h2><span class="mono">CR-214</span> · lead_routing v18, inspection_pricing_band v10 → prod</h2>${cr === 'waiting' ? pill('warn','waiting for approval') : cr === 'approved' ? pill('info','approved, not published') : pill('ok','published')}</header>
+     <dl class="kv"><dt>Opened by</dt><dd>asha · today 06:41</dd><dt>Needs</dt><dd>1 approver who is not the author</dd><dt>Tests</dt><dd>${pill('ok','14 of 14 passed')} <span class="hint">in stage, generation 57</span></dd><dt>Note</dt><dd>Widen band A to ₹8,50,000 and shorten the AI timeout. AI node stays in shadow.</dd></dl>
+     <div class="stack" data-component="DiffView"><h3 class="sub-h">Diff from prod</h3><pre class="code">${diff.map(([k,l]) => `<span class="diff-${k}">${k === 'add' ? '+' : k === 'del' ? '-' : ' '} ${esc(l)}</span>`).join('')}</pre></div>
+     <div class="actions" data-component="ApproveBar">
+       ${cr === 'waiting' ? `<button class="btn btn-primary" data-act="confirm" data-kind="approve">Approve</button><button class="btn" data-act="toast" data-msg="Request changes sends your comment to asha and keeps CR-214 open">Request changes</button><span class="hint">You are signed in as asha (author) in this prototype; approving is shown for review.</span>` :
+         cr === 'approved' ? `<button class="btn btn-danger" data-act="confirm" data-kind="publish">Publish to prod</button><span class="hint">Builds and signs generation ${state.gen + 1}.</span>` : `<span class="hint">Published as generation ${state.gen}.</span>`}
+     </div>
+   </section>
+   <section class="panel" data-component="RolloutStepper">
+     <header><h2>lead_routing v17 rollout</h2><span class="hint">prod · generation ${state.gen}</span></header>
+     ${rel ? `<p>${pill('warn','rolled back')} All units are back on v16. Start a new rollout from the change request when the fix is ready.</p>` :
+     `<ol class="stepper">${STEPS.map((p,i) => `<li class="${i < s ? 'done' : i === s ? 'current' : ''}"><span class="pct">${p}%</span><span class="st">${i < s ? 'done' : i === s ? 'current' : 'next'}</span></li>`).join('')}</ol>
+     <p class="hint">Units with <code class="inl">bucket(release salt) &lt; ${STEPS[s] * 100}</code> get v17, everyone else v16. Both versions are in the bundle, so every sidecar gives a unit the same answer.</p>
+     <div class="actions">${s < STEPS.length - 1 ? `<button class="btn btn-primary" data-act="confirm" data-kind="advance">Go to ${STEPS[s+1]}%</button>` : ''}<button class="btn" data-act="confirm" data-kind="rollback">Roll back to v16</button></div>`}
+   </section>
+   <section class="stack"><h2>Release history</h2><div class="tbl-wrap" data-component="ReleaseTable"><table><thead><tr><th class="num">Gen</th><th>When</th><th>Contents</th><th>By</th><th>State</th></tr></thead>
+     <tbody>${DATA.releases.map(r => `<tr><td class="num mono">${r.gen}</td><td class="nowrap">${r.when}</td><td>${esc(r.what)}</td><td>${r.who}</td><td>${r.state === 'rolling' ? pill('info','rolling out') : r.state === 'breakglass' ? pill('warn','no review') : pill('ok','done')}</td></tr>`).join('')}</tbody></table></div></section>`;
+};
+
+V.fleet = () =>
+  head({eyebrow: crumb(), title:'Sidecar fleet', sub:'Every sidecar reports its generation, version and last sync. Decisions never wait on this page’s data; it is for spotting pods that fell behind.'}) +
+  `<section class="tiles">
+    <div class="tile"><span class="label">Sidecars</span><span class="value">214</span><span class="note">lead-service · prod</span></div>
+    <div class="tile"><span class="label"><span class="dot warn"></span>On generation 42</span><span class="value">212</span><span class="note">2 on 41 since 09:12</span></div>
+    <div class="tile"><span class="label">Median sync lag</span><span class="value">1.8<small>s</small></span><span class="note">publish to swap, p95 3.9 s</span></div>
+    <div class="tile"><span class="label">Sidecar versions</span><span class="value">2</span><span class="note">1.0.0-rc.3 × 210 · rc.2 × 4</span></div>
+  </section>
+  <div class="tbl-wrap" data-component="FleetTable"><table><thead><tr><th>Pod</th><th>Node</th><th>Sidecar</th><th class="num">Gen</th><th class="num">Last sync</th><th class="num">p99</th><th>Status</th></tr></thead>
+   <tbody>${DATA.fleet.map(f => `<tr><td class="mono">${f.pod}</td><td class="mono">${f.node}</td><td class="mono">${f.ver}</td><td class="num mono">${f.gen}</td><td class="num mono">${f.sync}</td><td class="num mono">${f.p99}</td>
+     <td>${f.ok ? pill('ok','in sync') : `${pill('warn','behind')}<span class="desc" style="display:block;color:var(--warn);font-size:12.5px;max-width:34ch;margin-top:4px">${esc(f.err)}</span>`}</td></tr>`).join('')}</tbody></table></div>
+  <p class="hint">Showing 6 of 214. Lagging pods first in the real screen.</p>`;
+
+V.logs = () => {
+  const rows = DATA.logs.filter(l => !state.logFb || l.fb);
+  const sel = DATA.logs.find(l => l.id === state.log) || rows[0];
+  const tr = DATA.traces[sel.id];
+  const fmt = us => us >= 1000 ? `${n(Math.round(us/1000))} ms` : `${us} µs`;
+  return head({eyebrow: crumb(), title:'Decision log', sub:'Sampled records of individual calls: version, path through the graph and timing. Only fields listed in the decision’s logging settings are stored; everything else is a hash.'}) +
+  `<div class="filters" data-component="LogQuery"><label for="lq" class="sr">Query</label><input id="lq" type="search" value="decision:* env:${esc(state.env)} last:15m" aria-describedby="lq-hint">
+     <div class="chips"><button type="button" class="chip" data-act="logfb" aria-pressed="${state.logFb}">Fallback only</button></div></div>
+   <p class="hint" id="lq-hint">Search by request ID, decision, version, outcome or trace ID.</p>
+   <div class="grid-2">
+     <div class="tbl-wrap" data-component="LogTable"><table><thead><tr><th>Time</th><th>Request</th><th>Decision</th><th>Outcome</th><th class="num">Eval</th></tr></thead>
+       <tbody>${rows.map(l => `<tr class="clickable${l.id === sel.id ? ' selected' : ''}" data-act="log" data-id="${l.id}" tabindex="0"><td class="mono nowrap">${l.t}</td><td class="mono">${l.id}</td><td class="mono nowrap">${l.d}@${l.v}</td><td>${esc(l.out)}${l.fb ? ' ' + pill('warn','fallback') : ''}</td><td class="num mono nowrap">${fmt(l.us)}</td></tr>`).join('')}</tbody></table></div>
+     <section class="panel" data-component="PathTrace" aria-live="polite"><header><h2><span class="mono">${sel.id}</span></h2><span class="hint">${sel.d}@${sel.v} · generation 42</span></header>
+       <ol class="trace">${tr.path.map(([id,t,oc,us]) => `<li><span class="nd" style="--k:var(--t-${t})"></span><span><span class="nm">${id}</span><span class="oc">${esc(oc)}</span></span><span class="us">${fmt(us)}</span></li>`).join('')}</ol>
+       <div class="grid-2"><div class="stack"><h3 class="sub-h">Logged input fields</h3>${json(tr.input)}</div><div class="stack"><h3 class="sub-h">Output</h3>${json(tr.output)}</div></div>
+     </section>
+   </div>`;
+};
+
+V.audit = () =>
+  head({eyebrow: crumb(), title:'Audit', sub:'Every change to definitions, releases, credentials and members. Append-only.'}) +
+  `<div class="tbl-wrap" data-component="AuditTable"><table><thead><tr><th>When</th><th>Who</th><th>Action</th><th>Resource</th><th>Env</th></tr></thead>
+    <tbody>${DATA.audit.map(a => `<tr><td class="nowrap">${a.t}</td><td>${a.who}</td><td>${esc(a.act)} ${a.flag ? pill('warn','break-glass') : ''}</td><td class="mono">${esc(a.res)}</td><td class="mono">${a.env}</td></tr>`).join('')}</tbody></table></div>`;
+
+V.manage = () => {
+  const tabs = [['apps','Apps'],['credentials','Sidecar credentials'],['members','Members'],['environments','Environments'],['webhooks','Webhooks']];
+  const t = state.tab; let body = '';
+  if (t === 'apps') body = `<div class="tbl-wrap"><table><thead><tr><th>App</th><th>Owners</th><th>Environments</th><th class="num">Bundle limit</th><th class="num">Bundle now</th></tr></thead><tbody>
+      <tr><td class="name-plain">lead-service</td><td>team-leads</td><td class="mono">dev · stage · prod</td><td class="num mono">64 MB</td><td class="num mono">3.4 MB</td></tr></tbody></table></div>`;
+  if (t === 'credentials') body = `<div class="tbl-wrap"><table><thead><tr><th>Credential</th><th>Env</th><th>Created</th><th>Last used</th><th>State</th><th></th></tr></thead><tbody>${DATA.credentials.map(c => `<tr><td class="mono">${c.id}</td><td class="mono">${c.env}</td><td>${c.created}</td><td>${c.used}</td><td>${c.state === 'active' ? pill('ok','active') : pill('muted','revoked')}</td><td class="num">${c.state === 'active' ? `<button class="btn btn-sm" data-act="confirm" data-kind="revoke" data-name="${c.id}" data-env="${c.env}">Revoke</button>` : ''}</td></tr>`).join('')}</tbody></table></div>
+      <div class="actions"><button class="btn btn-primary" data-act="toast" data-msg="New credential: the secret is shown once; store it as a Kubernetes secret">New credential</button><span class="hint">A credential lets a sidecar read one app in one environment. Secrets are stored hashed.</span></div>`;
+  if (t === 'members') body = `<div class="tbl-wrap"><table><thead><tr><th>Name</th><th>Email</th><th>Role</th></tr></thead><tbody>${DATA.members.map(m => `<tr><td>${m.name}</td><td class="mono">${m.email}</td><td><label class="sr" for="role-${m.email}">Role for ${m.name}</label><select id="role-${m.email}">${['viewer','author','approver','admin'].map(r => `<option${r === m.role ? ' selected' : ''}>${r}</option>`).join('')}</select></td></tr>`).join('')}</tbody></table></div>
+      <p class="hint">viewer reads · author drafts and tests · approver approves, rolls out and rolls back · admin manages apps, credentials and members. Sign-in is through your OIDC provider.</p>`;
+  if (t === 'environments') body = `<div class="tbl-wrap"><table><thead><tr><th>Env</th><th>Approval</th><th>Signed bundles</th><th>Default log sample</th></tr></thead><tbody>
+      <tr><td class="mono">dev</td><td>none</td><td>optional</td><td class="mono">100%</td></tr>
+      <tr><td class="mono">stage</td><td>1 approver</td><td>required</td><td class="mono">10%</td></tr>
+      <tr><td class="mono">prod</td><td>1 approver, not the author</td><td>required</td><td class="mono">1%</td></tr></tbody></table></div>`;
+  if (t === 'webhooks') body = `<div class="tbl-wrap"><table><thead><tr><th>URL</th><th>Events</th><th>Last delivery</th></tr></thead><tbody>
+      <tr><td class="mono">https://hooks.example.com/gearbox</td><td class="mono">release.published, change.approved</td><td>${pill('ok','200 · 09:12')}</td></tr>
+      <tr><td class="mono">https://chat.example.com/hooks/T0/decisions</td><td class="mono">release.rolled_back</td><td>${pill('ok','200 · Oct 29')}</td></tr></tbody></table></div>`;
+  return head({eyebrow: crumb(), title:'Settings', sub:'App, access and delivery settings for lead-service.'}) +
+    `<div class="tabs" role="tablist" aria-label="Settings sections" data-component="SettingsTabs">${tabs.map(([id,l]) => `<button type="button" role="tab" id="tab-${id}" aria-selected="${t === id}" aria-controls="tabpanel" data-act="tab" data-id="${id}">${l}</button>`).join('')}</div>
+     <section class="stack" role="tabpanel" id="tabpanel" aria-labelledby="tab-${t}">${body}</section>`;
+};
+
+/* ---------- confirm dialog (in-page; the viewer has no native confirm) ---------- */
+let lastFocus = null, onOk = null;
+function confirmBox({title, body, ok, danger=true, action}){
+  lastFocus = document.activeElement;
+  $('#dlg-title').textContent = title; $('#dlg-body').innerHTML = body;
+  const b = $('#dlg-ok'); b.textContent = ok; b.className = 'btn ' + (danger ? 'btn-danger' : 'btn-primary');
+  onOk = action; $('#dialog').hidden = false; $('#dlg-cancel').focus();
+}
+function closeBox(){ $('#dialog').hidden = true; onOk = null; if (lastFocus && document.contains(lastFocus)) lastFocus.focus(); }
+$('#dlg-cancel').addEventListener('click', closeBox);
+$('#dlg-ok').addEventListener('click', () => { const f = onOk; closeBox(); if (f) f(); });
+$('#dialog').addEventListener('click', e => { if (e.target.id === 'dialog') closeBox(); });
+document.addEventListener('keydown', e => { if (e.key === 'Escape' && !$('#dialog').hidden) closeBox(); });
+
+const CONFIRMS = {
+  approve: () => ({title:'Approve CR-214?', ok:'Approve', danger:false, body:`<p class="env-callout">Target: prod</p><p>lead_routing v18 and inspection_pricing_band v10 become publishable. Nothing changes for callers until someone publishes.</p>`,
+    action:() => { state.crStatus = 'approved'; render(); toast('Approved CR-214'); }}),
+  publish: () => ({title:'Publish CR-214 to prod?', ok:'Publish to prod', body:`<p class="env-callout">Target: prod · generation ${state.gen + 1}</p><p>Every lead-service sidecar in prod swaps to the new bundle within seconds.</p>`,
+    action:() => { state.gen++; state.crStatus = 'published'; render(); toast(`Published generation ${state.gen} to prod`); }}),
+  advance: () => ({title:`Go to ${STEPS[state.step+1]}%?`, ok:`Go to ${STEPS[state.step+1]}%`, body:`<p class="env-callout">Target: prod · generation ${state.gen + 1}</p><p>${STEPS[state.step+1]}% of units get lead_routing v17; the rest stay on v16.</p>`,
+    action:() => { state.gen++; state.step++; render(); toast(`Published generation ${state.gen}: v17 at ${STEPS[state.step]}%`); }}),
+  rollback: () => ({title:'Roll back lead_routing to v16?', ok:'Roll back', body:`<p class="env-callout">Target: prod · generation ${state.gen + 1}</p><p>All units go back to v16. This is a new generation; v17 stays available for a later rollout.</p>`,
+    action:() => { state.gen++; state.rollbackDone = true; render(); toast(`Published generation ${state.gen}: lead_routing back on v16`); }}),
+  kill: el => ({title:`Turn on the kill switch for ${el.dataset.name}?`, ok:'Turn off for everyone', body:`<p class="env-callout">Target: ${esc(state.env)}</p><p>The gate returns false for every unit until the kill switch is turned off.</p>`,
+    action:() => { const g = DATA.gates.find(x => x.name === el.dataset.name); g.state = 'killed'; g.rollout = '0%'; render(); toast(`${g.name} is off for everyone in ${state.env}`); }}),
+  stop: () => ({title:'Stop callback_timing?', ok:'Stop experiment', body:`<p class="env-callout">Target: ${esc(state.env)}</p><p>Every unit gets the control parameters from the next generation. Assignments already logged are kept.</p>`,
+    action:() => toast('Stopped callback_timing; control parameters for everyone')}),
+  inline: () => ({title:'Make priority inline?', ok:'Create version', danger:false, body:`<p>This creates lead_routing v19 with the AI answer deciding the route when it arrives within 1,500 ms. Callers would wait up to that long. The new version goes through review like any other.</p>`,
+    action:() => toast('Created draft lead_routing v19 with priority inline')}),
+  revoke: el => ({title:`Revoke ${el.dataset.name}?`, ok:'Revoke', body:`<p class="env-callout">Target: ${esc(el.dataset.env)}</p><p>Sidecars using this credential keep serving their current bundle but can no longer fetch updates.</p>`,
+    action:() => { const c = DATA.credentials.find(x => x.id === el.dataset.name); c.state = 'revoked'; render(); toast(`Revoked ${c.id}`); }}),
+};
+
+/* ---------- events ---------- */
+const view = $('#view');
+view.addEventListener('click', e => {
+  const g = e.target.closest('[data-node]');
+  if (g){ state.node = g.dataset.node; render(); const again = view.querySelector(`[data-node="${state.node}"]`); if (again) again.focus(); return; }
+  const el = e.target.closest('[data-act]'); if (!el) return;
+  const a = el.dataset.act;
+  if (a === 'toast') toast(el.dataset.msg);
+  if (a === 'kind'){ state.kind = el.dataset.k; render(); }
+  if (a === 'rule'){ state.rule = el.dataset.id; render(); view.querySelector(`[data-id="${state.rule}"]`).focus(); }
+  if (a === 'log'){ state.log = el.dataset.id; render(); view.querySelector(`tr[data-id="${state.log}"]`).focus(); }
+  if (a === 'logfb'){ state.logFb = !state.logFb; if (state.logFb) state.log = DATA.logs.find(l => l.fb).id; render(); }
+  if (a === 'tab'){ state.tab = el.dataset.id; render(); $(`#tab-${state.tab}`).focus(); }
+  if (a === 'confirm') confirmBox(CONFIRMS[el.dataset.kind](el));
+});
+view.addEventListener('keydown', e => {
+  if (e.key !== 'Enter' && e.key !== ' ') return;
+  const g = e.target.closest('[data-node], tr[data-act]');
+  if (g){ e.preventDefault(); g.dispatchEvent(new MouseEvent('click', {bubbles:true})); }
+});
+view.addEventListener('input', e => {
+  const k = e.target.dataset.input; if (!k) return;
+  const v = e.target.value;
+  if (k === 'q'){ state.q = v; const pos = e.target.selectionStart; render(); const i = $('#dec-q'); i.focus(); i.setSelectionRange(pos, pos); return; }
+  if (k === 'price' || k === 'age'){ state[k] = Number(String(v).replace(/[^\d.]/g, '')) || 0; }
+  else state[k] = v;
+  if (k === 'price' || k === 'age' || k === 'city'){
+    const hit = evalTable();
+    view.querySelectorAll('.dt tbody tr').forEach((tr, i) => tr.classList.toggle('hit', !!hit && DATA.table.rows[i].id === hit.id));
+    $('#table-result').textContent = hit ? `matched ${hit.id} → band ${hit.band}, max_discount ${n(hit.md)}` : 'no row matched; the node returns its default';
+  }
+  if (k === 'lookupKey'){ const h = DATA.cityZone.find(([x]) => x.toLowerCase() === v.trim().toLowerCase()); $('#lookup-result').textContent = h ? `lookup("city_zone", "${h[0]}") = "${h[1]}"` : 'not in the preview rows; the full table has 412 keys'; }
+  if (k === 'segKey'){ const inS = DATA.blockedCities.some(c => c.toLowerCase() === v.trim().toLowerCase()); $('#seg-result').textContent = `inSegment("blocked_cities", "${v.trim()}") = ${inS}`; }
+});
+
+$('#env-seg').addEventListener('click', e => {
+  const b = e.target.closest('[data-env]'); if (!b) return;
+  state.env = b.dataset.env;
+  document.querySelectorAll('#env-seg button').forEach(x => x.setAttribute('aria-checked', String(x === b)));
+  render(); toast(`Showing ${state.env}. Sample figures stay the same in this prototype.`);
+});
+$('#global-search').addEventListener('keydown', e => {
+  if (e.key !== 'Enter') return;
+  const v = e.target.value.trim();
+  if (DATA.traces[v]){ state.log = v; state.logFb = false; go('logs'); }
+  else { state.q = v; state.kind = 'all'; go('decisions'); }
+});
+
+/* ---------- router ---------- */
+function go(h){ if (location.hash === '#' + h) render(); else location.hash = h; }
+function render(){
+  const id = location.hash.slice(1);
+  const key = V[id] ? id : 'overview';
+  renderNav(key);
+  view.innerHTML = V[key]();
+}
+window.addEventListener('hashchange', () => { render(); view.focus({preventScroll:true}); window.scrollTo(0, 0); });
+render();
+</script>
+
+</body>
+</html>
