@@ -41,7 +41,7 @@ var statefulFuncs = map[string]bool{"lookup": true, "inSegment": true, "gate": t
 // gearboxFuncs are the functions Gearbox adds (or replaces) on top of Expr.
 var gearboxFuncs = map[string]bool{
 	"lookup": true, "inSegment": true, "gate": true, "variant": true, "bucket": true,
-	"daysBetween": true, "coalesce": true, "keys": true, "values": true, "toPairs": true,
+	"daysBetween": true, "coalesce": true, "date": true, "keys": true, "values": true, "toPairs": true,
 }
 
 var cmpFuncs = map[string]string{"<": "_lt", "<=": "_le", ">": "_gt", ">=": "_ge"}
@@ -93,7 +93,7 @@ func buildExprOptions() []expr.Option {
 			"ctx":     types.TypeOf((*exprCtx)(nil)),
 		}),
 		expr.DisableBuiltin("now"),
-		expr.Timezone("UTC"),
+		expr.Function("date", fnDate),
 		expr.Patch(patcher{}),
 		expr.Function("_lt", cmpFn("<")),
 		expr.Function("_le", cmpFn("<=")),
@@ -429,4 +429,46 @@ func knownFunction(name string) bool {
 	}
 	_, ok := builtin.Index[name]
 	return ok
+}
+
+var dateLayouts = []string{
+	time.RFC3339Nano, "2006-01-02T15:04:05", "2006-01-02 15:04:05", "2006-01-02 15:04", "2006-01-02",
+	time.RFC1123Z, time.RFC1123, time.RFC822Z, time.RFC822, time.RFC850, time.ANSIC, time.UnixDate,
+}
+
+// fnDate replaces Expr's date(): strings are parsed in UTC unless they carry
+// an offset, or a third argument names a time zone. date(s, layout[, tz]).
+func fnDate(params ...any) (any, error) {
+	if len(params) == 0 || len(params) > 3 {
+		return nil, errors.New("date(value[, layout[, timezone]]) takes 1 to 3 arguments")
+	}
+	if params[0] == nil {
+		return nil, nil
+	}
+	if t, ok := params[0].(time.Time); ok {
+		return t, nil
+	}
+	s, ok := params[0].(string)
+	if !ok {
+		return nil, fmt.Errorf("date: cannot parse %s", kindName(params[0]))
+	}
+	loc := time.UTC
+	if len(params) == 3 {
+		name, _ := params[2].(string)
+		l, err := time.LoadLocation(name)
+		if err != nil {
+			return nil, fmt.Errorf("date: unknown time zone %q", name)
+		}
+		loc = l
+	}
+	if len(params) >= 2 {
+		layout, _ := params[1].(string)
+		return time.ParseInLocation(layout, s, loc)
+	}
+	for _, layout := range dateLayouts {
+		if t, err := time.ParseInLocation(layout, s, loc); err == nil {
+			return t, nil
+		}
+	}
+	return nil, fmt.Errorf("date: cannot parse %q", s)
 }
