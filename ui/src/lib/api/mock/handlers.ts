@@ -939,6 +939,9 @@ export const handlers: { [K in OperationId]: Handler<K> } = {
         getRes(c, a.app, 'gates', b.gate ?? '');
         (data.killed[a.env] ??= {})[b.gate!] = b.killed ?? true;
         const rel = newGeneration(c, a.app, a.env, { type: 'kill_switch', reason: b.reason ?? (b.killed === false ? 'Kill switch off' : 'Kill switch on') }, [`gates/${b.gate}`]);
+        // not in the contract yet (see contracts/CHANGES-REQUESTED.md): which way the switch went
+        (rel as Release & { killed?: boolean; gate?: string }).killed = b.killed ?? true;
+        (rel as Release & { killed?: boolean; gate?: string }).gate = b.gate;
         audit(c, 'release.published', `gates/${b.gate}`, a.app, a.env, { generation: rel.generation, type: 'kill_switch', killed: b.killed ?? true });
         return rel;
       }

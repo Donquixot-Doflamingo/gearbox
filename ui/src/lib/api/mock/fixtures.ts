@@ -905,7 +905,7 @@ function leadServiceData(): AppData {
     release(41, 'prod', 'change_request', 17 * HOUR, 'ravi@example.com', prodContents({ v: 17, from: 16, pct: 5 }, ['callback_eligibility']), { changeRequestId: 'cr_212' }),
     release(40, 'prod', 'change_request', 19 * HOUR, 'ravi@example.com', prodContents({ v: 17, from: 16, pct: 5 }, ['lead_routing']), { changeRequestId: 'cr_210' }),
     release(39, 'prod', 'rollback', 2 * DAY + 2 * HOUR, 'meera@example.com', prodContents(null, ['dealer_assignment']).map((c) => (c.name === 'lead_routing' ? { ...c, version: 16 } : c)), { breakGlass: true, reason: 'dealer_assignment v5 timed out on every call' }),
-    release(38, 'prod', 'kill_switch', 2 * DAY + 3 * HOUR, 'meera@example.com', prodContents(null, ['dealer_auction_v2']).map((c) => (c.name === 'lead_routing' ? { ...c, version: 16 } : c)), { reason: 'auction service down' }),
+    release(38, 'prod', 'kill_switch', 2 * DAY + 3 * HOUR, 'meera@example.com', prodContents(null, ['dealer_auction_v2']).map((c) => (c.name === 'lead_routing' ? { ...c, version: 16 } : c)), { reason: 'auction service down', killed: true, gate: 'dealer_auction_v2' } as Partial<Release>),
     release(37, 'prod', 'data', 3 * DAY, 'karan@example.com', prodContents(null, ['vip_dealers']).map((c) => (c.name === 'lead_routing' ? { ...c, version: 16 } : c))),
   ];
   const stageReleases: Release[] = [
