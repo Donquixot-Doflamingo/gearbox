@@ -494,4 +494,4 @@ lookupRows: { key: value }   # lookups only
 | `gearboxctl release <type> …` | `change-request <id>`, `data <kind>/<name>@<v>…`, `rollout <decision> <pct>`, `rollback <gen> --reason`, `kill <gate> [--undo] --reason` |
 | `gearboxctl bundle export --env E -o FILE` | Offline bundle (`bundle.WriteFile` format) |
 | `gearboxctl decide <decision> --env E -i input.json [--unit U]` | Remote Decision API |
-| `gearboxctl keys generate --out DIR [--id ID]` | Writes `signing.key` and `trusted-keys.txt` (`ID:base64`) |
+| `gearboxctl keys generate --out DIR [--id ID] [--if-missing]` | Writes `signing.key` and `trusted-keys.txt` (`ID:base64`) and prints `trusted key: ID:base64`; `--if-missing` keeps existing files |
