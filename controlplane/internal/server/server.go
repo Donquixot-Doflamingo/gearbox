@@ -454,6 +454,9 @@ func (s *Server) withLogging(h http.Handler) http.Handler {
 		start := time.Now()
 		sw := &statusWriter{ResponseWriter: w, status: 200}
 		h.ServeHTTP(sw, r)
+		if strings.HasPrefix(r.URL.Path, "/api/") {
+			countRequest(sw.status)
+		}
 		lvl := slog.LevelDebug
 		if sw.status >= 500 {
 			lvl = slog.LevelError
