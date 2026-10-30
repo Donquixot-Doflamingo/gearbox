@@ -9,6 +9,7 @@
   import { appHref, currentEnv, rememberApp } from '$lib/nav.svelte';
   import { query } from '$lib/query.svelte';
   import { session } from '$lib/stores/session.svelte';
+  import { shell } from '$lib/stores/shell.svelte';
 
   let { children }: { children: Snippet } = $props();
 
@@ -36,6 +37,9 @@
   let appList: App[] = $derived(apps.data ?? []);
   let envNames = $derived(envs.data?.map((e) => e.name) ?? appList.find((a) => a.name === app)?.environments ?? ['dev', 'stage', 'prod']);
   let envUnknown = $derived(!!envs.data && !envNames.includes(env));
+  $effect(() => {
+    shell.envs = envNames;
+  });
 </script>
 
 <a class="skip" href="#main">Skip to content</a>

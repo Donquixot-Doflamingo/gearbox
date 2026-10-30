@@ -221,6 +221,7 @@ export function targetOf(t: SType | 'any' | undefined): OpTarget {
 
 /** Operators that make sense for a field type ('any' → every operator). */
 export function operatorsFor(t: SType | 'any' | undefined): OperatorInfo[] {
+  if (t === 'object' || t === 'null') return OPERATORS.filter((o) => o.targets.includes('any'));
   const target = targetOf(t);
   if (target === 'any') return OPERATORS;
   return OPERATORS.filter((o) => o.targets.includes('any') || o.targets.includes(target));
