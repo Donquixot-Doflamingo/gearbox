@@ -39,6 +39,39 @@ For people building and operating Gearbox. Exact settings, RPC fields, operators
 
 **Update path**: release → publisher builds and signs → uploads blobs → envelope → head → feed event → sidecars fetch head from the API and **bytes from the object store** → verify → compile → test → swap.
 
+### Failure modes
+
+| Failure | Behaviour |
+|---|---|
+| Control plane down | Running sidecars keep serving; watch reconnects with backoff (1 s → 60 s, jitter); polling continues |
+| New pod while the control plane is down | Ready only from a cached bundle (same node, cache volume) or `GEARBOX_FALLBACK_BUNDLE`; otherwise not ready until the API returns |
+| Object store down | No new generations reach sidecars; running sidecars keep serving |
+| Bad bundle (signature, generation, engine version, hash, size, compile, tests) | Keep the current generation; `kept_previous` update record; `gearbox_sync_failures_total{reason}`; Fleet shows it |
+| Sidecar restart | Loads the cached bundle after re-verifying it, then syncs |
+| Sidecar down | Kubernetes restarts it; clients return their fallback within the deadline and count it |
+| Unknown decision / bad input | `NOT_FOUND` / `INVALID_ARGUMENT` with field errors |
+| Expression error at runtime | `onError` → decision `fallback` → `INTERNAL`/`NODE_ERROR` with the node ID |
+| Decision repeatedly slower than 10× budget | Breaker returns the fallback for 30 s and counts it |
+| AI timeout, Hub error, invalid answer | `onError`, `fallback_used: true` |
+| Log buffer full | Record dropped and counted; the call is never blocked |
+
+Clients never retry against the local sidecar: one attempt within the deadline, then the fallback.
+
+### Admin UI screens
+
+| Route | Screen |
+|---|---|
+| `/` | Overview: generation, p99, call rate, fallback rate, fleet health, recent releases, pending change requests |
+| `/apps/[app]/schemas` | Schema registry: editor, examples, compatibility, usages |
+| `/apps/[app]/decisions`, `…/[name]` | Decision list; graph editor with node inspector, rules editor and condition builder, table grid, transform mapper, AI node editor; test console and test cases |
+| `/apps/[app]/segments`, `/lookups`, `/gates`, `/experiments`, `/layers` | Data and targeting resources |
+| `/apps/[app]/changes`, `…/[id]` | Change requests: diff, tests, approvals, comments |
+| `/apps/[app]/releases` | Release history, rollout stepper, rollback, kill switch |
+| `/apps/[app]/fleet`, `/logs`, `/audit` | Sidecars, decision/update/exposure logs with path trace, audit |
+| `/settings/*` | Apps, environments and policies, credentials, members, webhooks, tokens |
+
+App and environment live in the URL (`?env=prod`) so every link is shareable. A clickable prototype is in `ui/prototype/index.html`.
+
 ## 2. Repository layout and ownership
 
 ```
@@ -312,3 +345,18 @@ Sizing: request 500m CPU per 2,000 decisions/s; set `GOMAXPROCS` from the CPU re
 | UI | Vitest components, Playwright flow create → test → change request → approve → publish → rollout → rollback, axe | `ui/` |
 | Load and soak | Client p99 < 1 ms at 2,000/s per pod; 72 h soak; chaos (tickets GBX-112, GBX-113) | `deploy/`, CI runner |
 | Examples | `examples/definitions` load in an offline sidecar and their test cases pass | CI |
+
+## 11. Design decisions
+
+| Decision | Why | Cost accepted | Revisit when |
+|---|---|---|---|
+| **Sidecar per pod, one Go engine for every language** | Identical answers in Go, Java, Python, C++; one place for sync, versioning, logs and metrics; rule changes are live without deploys | ≈ 0.15 ms per call instead of ≈ 0.02 ms in-process; a bundle copy per pod; sidecar down = no decisions for that pod (mitigated by native sidecars, restarts and client fallbacks) | A Go hot path needs < 50 µs: embed `engine/` with the sidecar's sync code as a library (same bundles, same logs) |
+| **HTTP/JSON + OpenAPI for the control plane, gRPC for the sidecar** | Browsers cannot speak native gRPC; the control plane is not latency-critical; the UI gets typed clients from the YAML. The sidecar path is latency-critical, so it stays gRPC on a Unix socket | Two API styles | – |
+| **Schema registry first** | Rules and tables are type-checked against real shapes; inputs validated before rules run; safe evolution with compatibility checks | Authors register schemas before writing rules (transforms help adapt shapes) | – |
+| **Expr as the expression language** | Fastest Go option measured; typed; sandboxed; compiled once per bundle | Go-only (fine behind a sidecar); one evaluation cannot be interrupted (hence cost limits) | – |
+| **Bundles through an S3 object store** | Control plane off the hot path; cheap fan-out; content-addressed deltas | A publish takes seconds to propagate | Sub-second propagation is required |
+| **Signed envelope over exact manifest bytes** | No canonical encoding needed; rotation through `key_id`; replay blocked by monotonic generations | Key management | – |
+| **Push feed (SSE) + 30 s poll** | Fast and robust to feed outages | Long-lived connections on the server | Connection counts grow: add a relay per cluster |
+| **Memory store for dev, MongoDB for real use** | Zero-dependency local runs; document model fits versioned definitions; large data (members, rows) lives in the object store | Two stores in production (MongoDB + S3) | The team prefers PostgreSQL |
+| **AI through one Integration Hub call** | Provider keys, routing and quotas stay in the Hub; Gearbox holds only a Hub token | Hub contract is a placeholder until its owner fills it in | Hub contract lands (GBX-096) |
+
