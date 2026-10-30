@@ -1,0 +1,70 @@
+replicaCount: 2
+
+image:
+  repository: gearbox-server
+  tag: "1.0.0"
+  pullPolicy: IfNotPresent
+
+imagePullSecrets: []
+podAnnotations: {}
+podLabels: {}
+
+service:
+  type: ClusterIP
+  port: 8080
+  metricsPort: 9464
+
+# Non-secret settings, rendered into a ConfigMap and loaded with envFrom.
+# Every GEARBOX_* server setting is listed in docs/04-reference.md §3.
+config:
+  GEARBOX_PUBLIC_URL: https://gearbox.example.com
+  GEARBOX_STORE: mongo
+  GEARBOX_MONGO_DB: gearbox
+  GEARBOX_OBJECT_STORE: s3://gearbox-bundles/bundles
+  GEARBOX_S3_REGION: us-east-1
+  GEARBOX_SIGNING_KEY_ID: prod-2026-10
+  GEARBOX_AUTH_MODE: oidc
+  GEARBOX_OIDC_ISSUER: https://login.example.com
+  GEARBOX_OIDC_CLIENT_ID: gearbox
+  GEARBOX_ADMIN_EMAILS: ""
+  GEARBOX_UI_DIR: /ui
+  GEARBOX_LOG_RETENTION: 336h
+  GEARBOX_LOG_LEVEL: info
+
+# Secret settings. Either name an existing Secret (it must contain the keys below
+# that you need) or let the chart create one from these values.
+secrets:
+  existingSecret: ""
+  mongoUri: ""             # key mongo-uri            → GEARBOX_MONGO_URI
+  redisUrl: ""             # key redis-url            → GEARBOX_REDIS_URL (required with >1 replica)
+  awsAccessKeyId: ""       # key aws-access-key-id    → AWS_ACCESS_KEY_ID (omit when using workload identity)
+  awsSecretAccessKey: ""   # key aws-secret-access-key → AWS_SECRET_ACCESS_KEY
+  signingKey: ""           # key signing.key          → GEARBOX_SIGNING_KEY_FILE (Ed25519 private key)
+  hmacKey: ""              # key hmac.key             → GEARBOX_HMAC_KEY_FILE
+  sessionKey: ""           # key session.key          → GEARBOX_SESSION_KEY_FILE (set it with >1 replica)
+  oidcClientSecret: ""     # key oidc-client-secret   → GEARBOX_OIDC_CLIENT_SECRET_FILE
+
+# Optionally publish the trusted public keys for sidecars in this namespace.
+trustedKeys:
+  create: false
+  name: gearbox-trusted-keys
+  keys: ""                 # "key_id:base64" lines, e.g. output of gearboxctl keys generate
+
+serviceAccount:
+  create: true
+  name: ""
+  annotations: {}          # e.g. cloud workload identity for S3
+
+resources:
+  requests: { cpu: 250m, memory: 256Mi }
+  limits: { memory: 1Gi }
+
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 65532
+  runAsGroup: 65532
+  fsGroup: 65532
+
+nodeSelector: {}
+tolerations: []
+affinity: {}

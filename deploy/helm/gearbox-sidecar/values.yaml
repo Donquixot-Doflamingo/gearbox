@@ -1,0 +1,22 @@
+# Library chart: these are documentation only. Pass your settings to the helpers
+# (usually .Values.gearbox of your service chart); missing keys use the defaults
+# in templates/_helpers.tpl ("gearbox-sidecar.defaults"), which mirror this file.
+app: ""                     # GEARBOX_APP (required)
+env: ""                     # GEARBOX_ENV (required)
+serverUrl: ""               # GEARBOX_SERVER_URL (required unless offline)
+image:
+  repository: gearbox-sidecar
+  tag: "1.0.0"
+  pullPolicy: IfNotPresent
+credentialSecret: ""        # Secret holding the app credential (gbx_cred_…)
+credentialKey: credential
+trustedKeysConfigMap: gearbox-trusted-keys
+trustedKeysKey: keys.txt
+fsGroup: 2000
+nativeSidecar: true         # init container with restartPolicy: Always (Kubernetes 1.29+)
+metricsPort: 9464
+logSink: server
+resources:
+  requests: { cpu: 500m, memory: 128Mi }
+  limits: { memory: 512Mi } # no CPU limit by default: throttling hurts tail latency
+extraEnv: []                # e.g. [{ name: GEARBOX_LOG_SAMPLE, value: "0.05" }]
