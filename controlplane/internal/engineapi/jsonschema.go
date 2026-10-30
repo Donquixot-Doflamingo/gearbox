@@ -110,7 +110,10 @@ func (v *validator) resolve(s schemaNode) schemaNode {
 var formats = map[string]func(string) bool{
 	"date-time": func(s string) bool { _, err := time.Parse(time.RFC3339, s); return err == nil },
 	"date":      func(s string) bool { _, err := time.Parse("2006-01-02", s); return err == nil },
-	"email":     func(s string) bool { _, err := mail.ParseAddress(s); return err == nil && !strings.ContainsAny(s, "<> ") },
+	"email": func(s string) bool {
+		_, err := mail.ParseAddress(s)
+		return err == nil && !strings.ContainsAny(s, "<> ")
+	},
 	"uuid": func(s string) bool {
 		return regexp.MustCompile(`^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$`).MatchString(s)
 	},

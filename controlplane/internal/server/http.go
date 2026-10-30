@@ -256,9 +256,9 @@ func (s *Server) validateRequest(r *http.Request, rt *route) error {
 		PathParams: params,
 		Route:      &routers.Route{Spec: s.doc, Path: op.Path, PathItem: op.PathItem, Method: op.Method, Operation: op.Op},
 		Options: &openapi3filter.Options{
-			MultiError:         true,
-			ExcludeRequestBody: rt.skipBody,
-			AuthenticationFunc: openapi3filter.NoopAuthenticationFunc,
+			MultiError:          true,
+			ExcludeRequestBody:  rt.skipBody,
+			AuthenticationFunc:  openapi3filter.NoopAuthenticationFunc,
 			SkipSettingDefaults: true,
 		},
 	}

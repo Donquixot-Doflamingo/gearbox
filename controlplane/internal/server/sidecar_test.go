@@ -2,8 +2,8 @@ package server
 
 import (
 	"bufio"
-	"crypto/ed25519"
 	"context"
+	"crypto/ed25519"
 	"crypto/sha256"
 	"encoding/hex"
 	"io"
