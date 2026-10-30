@@ -232,7 +232,7 @@ CPU ≈ 0.065 vCPU-ms per decision (≈ 15k/s per vCPU): request 500m for up to 
 | `GEARBOX_OTLP_ENDPOINT` | – | OpenTelemetry collector |
 | `GEARBOX_LOG_LEVEL` | `info` | Log level |
 
-`gearboxctl` reads `GEARBOX_SERVER_URL` (default `http://localhost:8080`), `GEARBOX_TOKEN` (or the token saved by `login`) and `GEARBOX_APP`.
+`gearboxctl` reads `GEARBOX_SERVER_URL` (default `http://localhost:8080`), `GEARBOX_TOKEN` (or the token saved by `login`) and `GEARBOX_APP`; the global flags `--server`, `--token` and `--app` override them.
 
 ## 4. Condition operators
 
