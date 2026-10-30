@@ -1,0 +1,83 @@
+// Gearbox bundle format: what the control plane publishes to the object store
+// and what sidecars download, verify and load.
+//
+// Layout in the object store (S3 or a filesystem in development):
+//   blobs/sha256/<hex>                      resource bytes (zstd-compressed definition JSON)
+//   envelopes/<app>/<env>/<generation>.pb    SignedManifest
+//   heads/<app>/<env>.json                   {"generation": 42, "envelope": "envelopes/..", "sha256": ".."}
+//
+// Resources carry the exact definition JSON returned by the control-plane API
+// (ResourceVersion.spec plus kind/name/version), so engine, API and UI share
+// one model: contracts/openapi/gearbox-admin.v1.yaml#/components/schemas.
+
+syntax = "proto3";
+
+package gearbox.v1;
+
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/ORG/gearbox/gen/go/gearbox/v1;gearboxv1";
+option java_multiple_files = true;
+option java_package = "org.gearbox.v1";
+
+// What is signed. The signature covers `manifest` exactly as stored, so no
+// canonical encoding is needed.
+message SignedManifest {
+  bytes manifest = 1;   // serialized Manifest
+  bytes signature = 2;  // Ed25519 over `manifest`
+  string key_id = 3;    // which trusted public key verifies it
+}
+
+message Manifest {
+  string app = 1;
+  string environment = 2;
+  int64 generation = 3;                      // strictly increasing per app+environment
+  google.protobuf.Timestamp created_at = 4;
+  string published_by = 5;
+  string release_type = 6;                   // change_request | data | rollout | rollback | kill_switch
+  string release_id = 7;
+  string min_engine_version = 8;             // semver; older sidecars refuse the bundle
+  repeated ResourceEntry resources = 9;
+  repeated RolloutEntry rollouts = 10;       // decisions currently split between two versions
+  repeated KilledGate killed_gates = 11;
+}
+
+message ResourceEntry {
+  string kind = 1;              // schemas | decisions | segments | lookups | gates | experiments | layers | segment_members | lookup_rows
+  string name = 2;
+  int64 version = 3;
+  string sha256 = 4;            // of the compressed bytes in blobs/sha256/<hex>
+  int64 size = 5;               // compressed
+  int64 decompressed_size = 6;
+  bool live = 7;                // false for the "from" version kept only for a rollout
+}
+
+message RolloutEntry {
+  string decision = 1;
+  int64 from_version = 2;
+  int64 to_version = 3;
+  int32 percent = 4;            // share of units on to_version
+  string salt = 5;              // bucket(salt, unit) < percent*100 → to_version
+}
+
+message KilledGate {
+  string gate = 1;
+  string reason = 2;
+}
+
+// Encoded content of a resource blob (before zstd).
+message ResourceBlob {
+  string kind = 1;
+  string name = 2;
+  int64 version = 3;
+  bytes spec_json = 4;          // the definition JSON (DecisionSpec, SchemaSpec, …)
+  // Large data for static segments and lookups (members/rows), so the spec
+  // stays small. Members of a pii segment are HMAC-SHA256 hex strings.
+  repeated string segment_members = 5;
+  repeated LookupRow lookup_rows = 6;
+}
+
+message LookupRow {
+  string key = 1;
+  bytes value_json = 2;
+}
