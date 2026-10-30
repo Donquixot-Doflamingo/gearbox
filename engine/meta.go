@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"strings"
+	"time"
 )
 
 // DecisionMeta describes how the sidecar should treat a decision's calls
@@ -116,3 +117,51 @@ func (s *Snapshot) DecideParsed(ctx context.Context, req Request, input any) (Re
 }
 
 var errNotReady = &Error{Reason: "NOT_READY", Message: "snapshot is not compiled"}
+
+// Fallback evaluates only the decision's fallback for a request (used by the
+// sidecar's circuit breaker). ok=false when the decision has no fallback.
+// The result has FallbackUsed=true and a single path step with outcome
+// "breaker_open".
+func (s *Snapshot) Fallback(ctx context.Context, req Request) (res Result, ok bool, err error) {
+	if s == nil || s.c == nil {
+		return Result{}, false, errNotReady
+	}
+	c := s.c
+	d, err := c.pick(req.Decision, req.PinVersion, req.UnitID)
+	if err != nil {
+		return Result{}, false, err
+	}
+	if d.fallback == nil || !d.fallback.present {
+		return Result{}, false, nil
+	}
+	start := time.Now()
+	var input any
+	if len(req.Input) > 0 {
+		if err := json.Unmarshal(req.Input, &input); err != nil {
+			return Result{}, true, &Error{Reason: "INPUT_SCHEMA", Message: "input is not valid JSON: " + err.Error()}
+		}
+	}
+	now := req.Now
+	if now.IsZero() {
+		now = start
+	}
+	r := c.getRun(ctx, now, req.UnitID, req.RequestID)
+	r.env["request"] = input
+	out, err := d.fallback.eval(r, input)
+	c.putRun(r)
+	if err != nil {
+		return Result{}, true, &Error{Reason: "NODE_ERROR", Message: "fallback: " + err.Error()}
+	}
+	res = Result{
+		DecisionVersion: d.versionText, DependencyHash: d.depHash, Generation: c.generation,
+		FallbackUsed: true, EvaluatedAt: now,
+		Path: []Step{{NodeID: d.entry.id, NodeType: d.entry.typ, Outcome: "breaker_open"}},
+	}
+	if d.fallback.constant {
+		res.Output = d.fallback.raw
+	} else {
+		res.Output = encodeJSON(out)
+	}
+	res.EvalMicros = time.Since(start).Microseconds()
+	return res, true, nil
+}
