@@ -26,8 +26,10 @@ func (s *Server) handlePublish(w http.ResponseWriter, r *http.Request, p *Princi
 	}
 	rel, err := s.Publish(r.Context(), p, r.PathValue("app"), r.PathValue("env"), in)
 	if err != nil {
+		serverMetrics.failed.Add(1)
 		return err
 	}
+	serverMetrics.publishes.Add(1)
 	writeJSON(w, http.StatusCreated, rel.Release)
 	return nil
 }

@@ -85,6 +85,8 @@ func (s *Server) handleWatch(w http.ResponseWriter, r *http.Request, p *Principa
 	_ = http.NewResponseController(w).SetWriteDeadline(time.Time{})
 	ch, cancel := s.bcast.Subscribe(p.CredApp, p.CredEnv)
 	defer cancel()
+	serverMetrics.watchers.Add(1)
+	defer serverMetrics.watchers.Add(-1)
 	h := w.Header()
 	h.Set("Content-Type", "text/event-stream")
 	h.Set("Cache-Control", "no-cache")
