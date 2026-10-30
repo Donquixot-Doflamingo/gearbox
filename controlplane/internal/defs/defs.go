@@ -69,6 +69,15 @@ func toJSONable(v any) any {
 	return v
 }
 
+// YAMLToJSON converts a YAML (or JSON) document to JSON.
+func YAMLToJSON(data []byte) (json.RawMessage, error) {
+	var v any
+	if err := yaml.Unmarshal(data, &v); err != nil {
+		return nil, err
+	}
+	return json.Marshal(toJSONable(v))
+}
+
 // Parse decodes YAML or JSON (JSON is YAML) into a File. kindHint fills a
 // missing kind (from the directory name).
 func Parse(data []byte, kindHint string) (File, error) {

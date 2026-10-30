@@ -1,7 +1,6 @@
 package server
 
 import (
-	"bytes"
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/csv"
@@ -338,9 +337,12 @@ func (s *Server) handleReplaceLookupRows(w http.ResponseWriter, r *http.Request,
 		return errUnprocessable("VALIDATION_FAILED", "Invalid rows", "Rows do not match valueSchema %s@%d.", spec.ValueSchema.Name, spec.ValueSchema.Version).with(bad...)
 	}
 	for i := range rows {
-		var buf bytes.Buffer
-		if json.Compact(&buf, rows[i].Value) == nil {
-			rows[i].Value = buf.Bytes()
+		// Canonical JSON (sorted keys) so equal data hashes equal.
+		var v any
+		if json.Unmarshal(rows[i].Value, &v) == nil {
+			if b, err := json.Marshal(v); err == nil {
+				rows[i].Value = b
+			}
 		}
 	}
 	sort.Slice(rows, func(i, j int) bool { return rows[i].Key < rows[j].Key })
