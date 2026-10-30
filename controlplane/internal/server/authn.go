@@ -79,11 +79,26 @@ func isMutating(m string) bool {
 	return m != http.MethodGet && m != http.MethodHead && m != http.MethodOptions
 }
 
+type systemKey struct{}
+
+// SystemHandler serves the API in-process as an internal admin ("system"),
+// for the seeder and tools running inside the server binary. It is never
+// reachable from the network.
+func (s *Server) SystemHandler() http.Handler {
+	h := s.Handler()
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		h.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), systemKey{}, true)))
+	})
+}
+
 func (s *Server) authenticate(r *http.Request, rt *route) (*Principal, error) {
 	if rt.auth == authNone {
 		return nil, nil
 	}
 	ctx := r.Context()
+	if ctx.Value(systemKey{}) == true && bearer(r) == "" {
+		return &Principal{Member: model.Member{ID: "system", Email: "system@gearbox.local", Name: "system", Role: model.RoleAdmin, Apps: []string{}}, Kind: "dev"}, nil
+	}
 	tok := bearer(r)
 	switch {
 	case strings.HasPrefix(tok, credPrefix):
