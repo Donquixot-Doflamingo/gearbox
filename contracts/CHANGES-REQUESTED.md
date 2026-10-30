@@ -90,3 +90,10 @@ Found while writing the docs, examples and deploy files. Each item: what, why, w
 
 - **What:** `examples/go-service` is a separate module (it uses `replace` to `clients/go` and `gen/go`). It is not in `go.work`.
 - **Proposal:** add `./examples/go-service` to `go.work` once `clients/go` builds, so `go vet ./...` covers it.
+
+## 16. `scripts/dev/restricted-env.sh`: wrong `gopkg.in/yaml.v3` mirror version (not a contract; lead-owned path)
+
+- **What:** the MIRRORS entry is `github.com/go-yaml/yaml v0.0.0-20220527083530-f6f7691f1bdb`; that revision does not exist (`unknown revision`). The module cache and GitHub have `v0.0.0-20220527083530-f6f7691b1fde`.
+- **Why:** any module that needs `gopkg.in/yaml.v3` fails to build in the restricted sandbox.
+- **Affected:** every Go module using YAML (control plane, CLI, sidecar `--definitions-dir`). Also consider adding mirrors for `gopkg.in/yaml.v2` (`github.com/go-yaml/yaml v2.1.0+incompatible`), `golang.org/x/term` and `golang.org/x/telemetry`, which test dependencies pull in.
+- **Also:** `scripts/check-names.sh` still excludes `docs/archive/**`; the archive is deleted on `agent/docs`, so the exclusion can go.
