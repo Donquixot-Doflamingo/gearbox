@@ -267,7 +267,8 @@ fieldset:disabled .gated { opacity: 0.45; pointer-events: none; user-select: non
 .palette button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 .palette button::before { content: ''; width: 9px; height: 9px; border-radius: 2px; background: var(--k); flex: none; }
 @media (max-width: 760px) { .palette { position: static; flex-direction: row; flex-wrap: wrap; } }
-.canvas { background-color: var(--surface); background-image: radial-gradient(var(--line) 1px, transparent 1.2px); background-size: 18px 18px; border: 1px solid var(--line); border-radius: var(--r); overflow: auto; max-height: 72vh; position: relative; touch-action: none; }
+.canvas { background-color: var(--surface); background-image: radial-gradient(var(--line) 1px, transparent 1.2px); background-size: 18px 18px; border: 1px solid var(--line); border-radius: var(--r); overflow: auto; max-height: 72vh; position: relative; }
+.g-node, .g-port { touch-action: none; }
 .canvas.connecting { cursor: crosshair; }
 .graph { display: block; user-select: none; -webkit-user-select: none; }
 .g-node { cursor: grab; }
