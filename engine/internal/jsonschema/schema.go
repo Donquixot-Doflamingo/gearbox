@@ -574,3 +574,31 @@ func (s *Schema) PIIPaths() [][]string {
 	walk(s, nil, 0)
 	return out
 }
+
+// ObjectOf builds an object schema (used for synthesized node outputs).
+func ObjectOf(props map[string]*Schema, required []string, closed bool) *Schema {
+	s := &Schema{Types: TObj, Properties: props, AddlFalse: closed, required: map[string]bool{}}
+	for n := range props {
+		s.PropOrder = append(s.PropOrder, n)
+	}
+	sort.Strings(s.PropOrder)
+	for _, r := range required {
+		if !s.required[r] {
+			s.required[r] = true
+			s.Required = append(s.Required, r)
+		}
+	}
+	return s
+}
+
+// ArrayOf builds an array schema; maxItems < 0 means unbounded.
+func ArrayOf(items *Schema, maxItems int) *Schema {
+	s := &Schema{Types: TArr, Items: items}
+	if maxItems >= 0 {
+		s.MaxItems = &maxItems
+	}
+	return s
+}
+
+// Typed builds a schema that only constrains the type.
+func Typed(t TypeSet) *Schema { return &Schema{Types: t} }
