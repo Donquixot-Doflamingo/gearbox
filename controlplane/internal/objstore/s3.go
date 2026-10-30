@@ -33,6 +33,9 @@ type S3Config struct {
 	Endpoint  string
 	Secure    bool
 	PathStyle bool
+	// PresignEndpoint is written into presigned URLs when sidecars reach
+	// the service at another address (host[:port] or URL).
+	PresignEndpoint string
 	// Creds overrides the credential chain (tests).
 	Creds *credentials.Credentials
 }
@@ -56,23 +59,29 @@ func ParseS3URL(raw string) (S3Config, error) {
 		PathStyle: q.Get("pathStyle") == "true",
 	}
 	if ep := q.Get("endpoint"); ep != "" {
-		switch {
-		case strings.HasPrefix(ep, "http://"):
-			cfg.Endpoint, cfg.Secure = strings.TrimPrefix(ep, "http://"), false
-		case strings.HasPrefix(ep, "https://"):
-			cfg.Endpoint = strings.TrimPrefix(ep, "https://")
-		default:
-			cfg.Endpoint = ep
-		}
-		cfg.Endpoint = strings.TrimRight(cfg.Endpoint, "/")
+		cfg.Endpoint, cfg.Secure = splitEndpoint(ep, true)
 	}
+	cfg.PresignEndpoint = q.Get("presignEndpoint")
 	return cfg, nil
+}
+
+// splitEndpoint turns "http://host:port" into ("host:port", false).
+func splitEndpoint(ep string, defSecure bool) (string, bool) {
+	secure := defSecure
+	switch {
+	case strings.HasPrefix(ep, "http://"):
+		ep, secure = strings.TrimPrefix(ep, "http://"), false
+	case strings.HasPrefix(ep, "https://"):
+		ep, secure = strings.TrimPrefix(ep, "https://"), true
+	}
+	return strings.TrimRight(ep, "/"), secure
 }
 
 // S3 stores objects in a bucket and returns presigned GET URLs.
 type S3 struct {
-	c   *minio.Client
-	cfg S3Config
+	c       *minio.Client
+	presign *minio.Client
+	cfg     S3Config
 }
 
 // NewS3 builds the client; it does not contact the service.
@@ -94,7 +103,14 @@ func NewS3(cfg S3Config) (*S3, error) {
 	if err != nil {
 		return nil, fmt.Errorf("objstore: s3 client: %w", err)
 	}
-	return &S3{c: c, cfg: cfg}, nil
+	s := &S3{c: c, presign: c, cfg: cfg}
+	if cfg.PresignEndpoint != "" {
+		ep, secure := splitEndpoint(cfg.PresignEndpoint, cfg.Secure)
+		if s.presign, err = minio.New(ep, &minio.Options{Creds: creds, Secure: secure, Region: cfg.Region, BucketLookup: lookup}); err != nil {
+			return nil, fmt.Errorf("objstore: s3 presign client: %w", err)
+		}
+	}
+	return s, nil
 }
 
 func (s *S3) Kind() string { return "s3" }
@@ -173,7 +189,7 @@ func (s *S3) URL(ctx context.Context, key string, ttl time.Duration) (string, er
 	if err != nil {
 		return "", err
 	}
-	u, err := s.c.PresignedGetObject(ctx, s.cfg.Bucket, k, ttl, nil)
+	u, err := s.presign.PresignedGetObject(ctx, s.cfg.Bucket, k, ttl, nil)
 	if err != nil {
 		return "", fmt.Errorf("objstore: presign %s: %w", key, err)
 	}
