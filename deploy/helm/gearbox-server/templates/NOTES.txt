@@ -1,0 +1,14 @@
+Gearbox server {{ .Chart.AppVersion }} is starting ({{ .Values.replicaCount }} replicas).
+
+API and UI:  kubectl port-forward svc/{{ include "gearbox-server.fullname" . }} 8080:{{ .Values.service.port }}
+             then open http://localhost:8080
+{{- if gt (int .Values.replicaCount) 1 }}
+{{- if not (or .Values.secrets.existingSecret .Values.secrets.redisUrl) }}
+
+WARNING: more than one replica without secrets.redisUrl: change-feed events only reach
+sidecars connected to the publishing replica (others catch up by polling within 30 s).
+{{- end }}
+{{- end }}
+
+Sidecars need the trusted public key of GEARBOX_SIGNING_KEY_ID={{ .Values.config.GEARBOX_SIGNING_KEY_ID }}
+in a ConfigMap (key keys.txt) in each service namespace.
