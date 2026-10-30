@@ -1,0 +1,11 @@
+# BuildKit uses <Dockerfile>.dockerignore next to the Dockerfile.
+.git
+**/node_modules
+ui/.svelte-kit
+ui/build
+.data
+.gowork-mirrors
+bin
+**/*.test
+clients/java/target
+clients/python/gen
