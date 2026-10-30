@@ -113,10 +113,10 @@ func TestFieldOperators(t *testing.T) {
 func TestGroupsAndNestedPaths(t *testing.T) {
 	s := condSet(t, `{"any":[{"all":[{"field":"a.b","op":"EQ","value":1},{"not":{"field":"c","op":"EXISTS"}}]},{"field":"list[1].x","op":"EQ","value":"y"}]}`)
 	cases := map[string]bool{
-		`{"a":{"b":1}}`:                true,
-		`{"a":{"b":1},"c":1}`:          false,
+		`{"a":{"b":1}}`:                  true,
+		`{"a":{"b":1},"c":1}`:            false,
 		`{"list":[{"x":"n"},{"x":"y"}]}`: true,
-		`{"a":"notmap"}`:               false,
+		`{"a":"notmap"}`:                 false,
 	}
 	for in, want := range cases {
 		if got := string(decide(t, s, "cond", in, "").Output) == `{"ok":true}`; got != want {
