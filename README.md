@@ -19,6 +19,7 @@ Everything in the contracts is built in one pass by four parallel workstreams an
 | Control plane + `gearboxctl` | All 67 API operations, memory / file / MongoDB stores, filesystem / S3 object stores, publishing, approvals, rollouts, rollback, kill switch, SSE feed, OIDC + dev auth | Every response checked against the OpenAPI spec; seeded server answers `lead_routing`; rule without schema → `422 SCHEMA_REQUIRED` |
 | Admin UI (SvelteKit) | Every screen, mock mode with sample data | `.ts` type-checked and 58 unit tests; **not yet compiled** (npm was unavailable) |
 | Docs, tickets, deploy | 4 docs, 98 tickets, Dockerfiles, compose, Helm | Charts rendered, compose config valid |
+| **End to end** | `make e2e`: MongoDB 7 + LocalStack S3 in Docker → server (dev auth, no sign-in) → signed bundle in S3 → sidecar → example Go service; publish, swap, rollback, logs, outages | **18/18 checks pass**; MongoDB and S3 integration suites pass |
 
 ### Measured performance (2 vCPU, JSON decode excluded)
 
@@ -37,7 +38,7 @@ Everything in the contracts is built in one pass by four parallel workstreams an
 3. Fill in the Integration Hub contract in `contracts/openapi/integration-hub-ai.yaml` (placeholder).
 4. Review `contracts/CHANGES-REQUESTED.md` (small contract fixes the workstreams asked for) — GBX-002.
 
-Known gaps: OpenTelemetry export (GBX-123), AI cache/budget enforcement and shadow answers in decision logs (GBX-122), AI `precompute` mode, MongoDB / S3 / OIDC not exercised against real services yet.
+Known gaps: OpenTelemetry export (GBX-123), AI cache/budget enforcement and shadow answers in decision logs (GBX-122), AI `precompute` mode, OIDC sign-in not exercised (local runs use `GEARBOX_AUTH_MODE=dev`, which skips sign-in).
 
 ## Repository map
 
@@ -76,6 +77,8 @@ Sidecar only, from YAML files, no server:
 ```bash
 make sidecar-offline                       # gearbox-sidecar --definitions-dir examples/definitions --allow-unsigned --watch
 ```
+
+End to end against MongoDB and LocalStack S3 (needs Docker): `make e2e`.
 
 Other targets: `make build`, `make test`, `make vet`, `make ui`, `make gen`, `make check-names`, `make images` (`make help` lists all). In a network-restricted sandbox prefix them with `GEARBOX_RESTRICTED=1` (see [`scripts/dev/restricted-env.sh`](scripts/dev/restricted-env.sh)).
 

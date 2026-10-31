@@ -6,4 +6,5 @@ use (
 	./controlplane
 	./clients/go
 	./gen/go
+	./examples/go-service
 )
