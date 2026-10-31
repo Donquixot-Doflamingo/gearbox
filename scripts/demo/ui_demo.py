@@ -10,12 +10,13 @@ services and records how long each took to change its answer. Screenshots + a vi
 
 import argparse
 import json
+import os
 import time
 import urllib.request
 
 from playwright.sync_api import sync_playwright
 
-UI = "http://127.0.0.1:8080"
+UI = "http://127.0.0.1:" + os.environ.get("GEARBOX_DEMO_PORT", "8080")
 A = UI + "/apps/lead_service"
 LEAD = json.dumps({"lead": {"id": "L-77", "city": "Indore", "source": "web"},
                    "car": {"make": "Hyundai", "model": "i20", "year": 2021, "km": 12000, "price": 690000},
