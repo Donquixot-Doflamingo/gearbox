@@ -98,19 +98,23 @@ func New(cfg *config.Config, opt Options) (*App, error) {
 		if out == nil {
 			out = os.Stdout
 		}
-		if cfg.LogSink == "stdout" || cfg.LogSink == "both" {
+		if cfg.LogSink == "otlp" {
+			slog.Warn("GEARBOX_LOG_SINK=otlp is not implemented yet; writing JSON lines to stdout")
+		}
+		if cfg.LogSink == "stdout" || cfg.LogSink == "both" || cfg.LogSink == "otlp" {
 			sinks = append(sinks, &logs.StdoutSink{W: out})
 		}
-		if cfg.LogSink == "http" || cfg.LogSink == "both" {
+		if cfg.LogSink == "server" || cfg.LogSink == "both" {
 			sinks = append(sinks, &logs.HTTPSink{URL: base + "/sidecar/v1/logs", Credential: cfg.Credential, Client: httpClient})
 		}
 	}
 	logKey := cfg.LogHMACKey
 	if len(logKey) == 0 {
 		logKey = []byte("gearbox-log-hmac:" + cfg.App + ":" + cfg.Env)
-		slog.Warn("GEARBOX_LOG_HMAC_KEY is not set; input/output HMACs use a key derived from the app name")
+		slog.Warn("GEARBOX_HMAC_KEY_FILE is not set; logged HMACs and pii segment lookups use keys derived from the app name")
 	}
 	logger := logs.New(cfg.LogBuffer, logKey, sinks, func(log string, n int) { m.LogDropped.Add(float64(n), log) })
+	logger.SetBatch(cfg.LogBatch)
 	if opt.LogFlush > 0 {
 		logger.SetFlushInterval(opt.LogFlush)
 	}
@@ -122,7 +126,7 @@ func New(cfg *config.Config, opt Options) (*App, error) {
 		cacheDir = ""
 	}
 	app, env := cfg.App, cfg.Env
-	if cfg.Offline() {
+	if cfg.Offline() || cfg.ServerURL == "" {
 		app, env = "", ""
 	}
 	a.Loader = &syncer.Loader{
