@@ -154,8 +154,9 @@ func TestCumulative(t *testing.T) {
 }
 
 func TestRolloutBucketStableAndSpread(t *testing.T) {
-	if RolloutBucket("app", "s", "u1") != RolloutBucket("app", "s", "u1") {
-		t.Fatal("not stable")
+	first, second := RolloutBucket("app", "s", "u1"), RolloutBucket("app", "s", "u1")
+	if first != second {
+		t.Fatalf("not stable: %d then %d", first, second)
 	}
 	under := 0
 	for i := 0; i < 20000; i++ {

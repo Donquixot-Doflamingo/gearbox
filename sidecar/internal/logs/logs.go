@@ -122,7 +122,6 @@ type Logger struct {
 	batch     int
 	wake      chan struct{}
 	done      chan struct{}
-	once      sync.Once
 }
 
 // New returns a logger with one buffer of size per log.

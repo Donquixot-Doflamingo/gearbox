@@ -6,7 +6,6 @@ package server
 import (
 	"context"
 	"crypto/ed25519"
-	"crypto/rand"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -238,12 +237,6 @@ func (s *Server) SigningPublicKeyLine() string {
 
 // EngineName reports the engine and bundler in use.
 func (s *Server) EngineName() string { return s.eng.Name() + "/" + s.bun.Name() }
-
-func randomBytes(n int) []byte {
-	b := make([]byte, n)
-	_, _ = rand.Read(b)
-	return b
-}
 
 // ---------------------------------------------------------------- routing
 

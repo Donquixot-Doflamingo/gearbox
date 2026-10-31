@@ -124,11 +124,9 @@ func TestCLI(t *testing.T) {
 		t.Fatal(out)
 	}
 	items := []string{"change", "open", "--env", "stage", "--title", "stage it"}
-	for _, it := range []string{"schemas/lead_input@1", "schemas/eligibility_input@1", "schemas/eligibility_output@1", "schemas/routing_output@1",
+	items = append(items, "schemas/lead_input@1", "schemas/eligibility_input@1", "schemas/eligibility_output@1", "schemas/routing_output@1",
 		"schemas/segment_attrs_city_price@1", "schemas/city_zone_value@1", "segments/blocked_cities@2", "segments/metro_premium@1",
-		"segments/beta_10pct@1", "lookups/city_zone@1", "gates/new_inspection_flow@1", "experiments/callback_timing@1", "decisions/lead_routing@1"} {
-		items = append(items, it)
-	}
+		"segments/beta_10pct@1", "lookups/city_zone@1", "gates/new_inspection_flow@1", "experiments/callback_timing@1", "decisions/lead_routing@1")
 	out = ctl(t, items...)
 	if !strings.Contains(out, "cr_2 opened for stage: open") {
 		t.Fatalf("change open: %s", out)

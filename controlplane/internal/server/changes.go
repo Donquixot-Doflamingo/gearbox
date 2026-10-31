@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"net/http"
 	"slices"
+	"sort"
+	"strings"
 
 	"github.com/ORG/gearbox/controlplane/internal/model"
 	"github.com/ORG/gearbox/controlplane/internal/store"
@@ -127,7 +129,62 @@ func (s *Server) liveDiff(ctx context.Context, app string, st model.EnvState, it
 	}
 	d, _ := diffSpecs(viewSpec(it.Kind, prev.Spec, prev.Data), viewSpec(it.Kind, next.Spec, next.Data),
 		fmt.Sprintf("%s/%s@%d", it.Kind, it.Name, lv), fmt.Sprintf("%s/%s@%d", it.Kind, it.Name, it.Version))
-	return &lv, d
+	return &lv, d + s.membersDiff(ctx, it.Kind, prev.Data, next.Data)
+}
+
+// membersDiff lists static segment members added and removed between two data
+// references, so reviewers see what a data change does (the spec only carries
+// the count). Capped at 50 lines each way. PII segments show HMACs.
+func (s *Server) membersDiff(ctx context.Context, kind string, a, b *model.DataRef) string {
+	if kind != model.KindSegments || (a == nil && b == nil) {
+		return ""
+	}
+	if a != nil && b != nil && a.SHA256 == b.SHA256 {
+		return ""
+	}
+	am, err1 := s.loadMembers(ctx, a)
+	bm, err2 := s.loadMembers(ctx, b)
+	if err1 != nil || err2 != nil {
+		return ""
+	}
+	inA := make(map[string]bool, len(am))
+	for _, m := range am {
+		inA[m] = true
+	}
+	inB := make(map[string]bool, len(bm))
+	for _, m := range bm {
+		inB[m] = true
+	}
+	var added, removed []string
+	for _, m := range bm {
+		if !inA[m] {
+			added = append(added, m)
+		}
+	}
+	for _, m := range am {
+		if !inB[m] {
+			removed = append(removed, m)
+		}
+	}
+	if len(added) == 0 && len(removed) == 0 {
+		return ""
+	}
+	sort.Strings(added)
+	sort.Strings(removed)
+	var sb strings.Builder
+	fmt.Fprintf(&sb, "@@ segment members: +%d -%d @@\n", len(added), len(removed))
+	write := func(prefix string, xs []string) {
+		for i, m := range xs {
+			if i == 50 {
+				fmt.Fprintf(&sb, "%s… and %d more\n", prefix, len(xs)-50)
+				return
+			}
+			fmt.Fprintf(&sb, "%s%s\n", prefix, m)
+		}
+	}
+	write("-", removed)
+	write("+", added)
+	return sb.String()
 }
 
 func crView(cr model.ChangeRequest) model.ChangeRequest {
