@@ -31,7 +31,7 @@ AI decisions are excluded from this release by request: the AI node, its Integra
 | S3 | **Control-plane changes reach the sidecar** | — | `make e2e` proves each kind: decision version, segment members, gate create, kill switch, experiment, 50% rollout then 100%, rollback | done |
 | S4 | Sidecar logs which version answered each call and every update | decision log (version, dependency hash, path), update log, exposure log | `make e2e`: decision and update logs reach the control plane | done |
 | S5 | Keeps working when the control plane is down; restarts from disk | last-known-good cache, re-verified on load | `make e2e`: control plane killed → still answers; sidecar restarted with control plane down → ready from disk, same version | done |
-| S6 | Thin client libraries: deadline, fallback, request ID | `clients/go` (full), `clients/python`, `clients/java` | Go: tests + `examples/go-service` + `examples/probe` in `make e2e`. Python: 5 tests against a real sidecar (`clients/python/tests`). Java: 2 tests pass (Maven 3.9.9, JDK 17); Python and Java example services followed live changes in the demo ([06 §3](06-setup-and-examples-guide.md#3-make-a-change-and-watch-the-services-pick-it-up)) | done (Python/Java latency not yet benchmarked) |
+| S6 | Thin client libraries: deadline, fallback, request ID | `clients/go` (full), `clients/python`, `clients/java` | Go: tests + `examples/go-service` + `examples/probe` in `make e2e`. Python: 5 tests against a real sidecar (`clients/python/tests`). Java: 2 tests pass (Maven 3.9.9, JDK 17); Python and Java example services followed live changes in the demo ([06 §3](06-setup-and-examples-guide.md#3-make-a-change-and-watch-the-services-pick-it-up)) | done; latency and throughput in [07 §5](07-benchmarks.md#5-python-java-and-go-clients-compared-second-machine) |
 | S7 | A separate client to integration-test the sidecar | `examples/probe` (`gearbox-probe`): status, decide, gate, variant, bench — uses only the public Go client | used by `make e2e` for every propagation check | done |
 | S8 | Backend service integrated with the sidecar | `examples/go-service` (HTTP service routing leads through the sidecar, 5 ms deadline, fallback) | `make e2e`: answers via sidecar; falls back when the sidecar is down | done |
 
@@ -52,7 +52,6 @@ AI decisions are excluded from this release by request: the AI node, its Integra
 
 ## Known gaps (tracked in tickets)
 
-- Python and Java client latency not benchmarked yet (commands in [07 §5](07-benchmarks.md#5-python-and-java-clients)).
 - OIDC sign-in not exercised against a real identity provider.
 - OpenTelemetry export (GBX-123); AI cache and budget enforcement (GBX-122).
 - Latency figures come from a 2-vCPU shared sandbox; measure on production hardware before setting SLOs.

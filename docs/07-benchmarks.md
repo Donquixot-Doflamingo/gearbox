@@ -2,7 +2,7 @@
 
 Every number on this page was measured; none is estimated or copied from elsewhere. The raw output is committed in [`docs/benchmarks/`](benchmarks/), and each table names the command that produced it. When a number is poor or noisy, it is shown as measured.
 
-> **Read this first: the machine.** All runs used a cloud sandbox with **2 vCPUs** (Intel Xeon @ 2.10 GHz, shared, Linux amd64) and Go 1.24.7. The load generator, the sidecar and (for propagation) the control plane all ran **on the same 2 vCPUs**, so they compete for CPU. Production pods with dedicated cores should do better, but that has not been measured yet. Measure on your own hardware before setting SLOs: `make bench-engine bench-sidecar bench-load bench-propagation`.
+> **Read this first: the machines.** Sections 1–4 used a cloud sandbox with **2 vCPUs** (Intel Xeon @ 2.10 GHz, shared, Linux amd64) and Go 1.24.7. The load generator, the sidecar and (for propagation) the control plane all ran **on the same 2 vCPUs**, so they compete for CPU. Production pods with dedicated cores should do better, but that has not been measured yet. Section 5 (Go vs Python vs Java) used a second machine, a 4-vCPU arm64 Linux VM. Measure on your own hardware before setting SLOs: `make bench-engine bench-sidecar bench-load bench-propagation`.
 
 ## Summary
 
@@ -17,7 +17,9 @@ Every number on this page was measured; none is estimated or copied from elsewhe
 | Publish returns → sidecar serves the new version, jitter off | **median 4.4 ms** (3.3–7.7) | `JITTER=0s make bench-propagation` |
 | Same, default 2 s fetch jitter | **median 1,144 ms** (451–1,972): the jitter is deliberate | `JITTER=2s N=8 make bench-propagation` |
 | UI: click "Publish" → example service returns the new answer (default jitter) | **1.1 s and 1.41 s** in two runs | `scripts/demo/ui_demo.py` |
-| Python and Java clients: latency and throughput | **not measured yet** (see [below](#5-python-and-java-clients)) | `bench.py`, `java -jar … bench` |
+| Python client (4-vCPU arm64 VM), 1 thread → 4 threads | **p50 136–147 µs**, ~0.42 M calls/min → **~0.68 M calls/min** (stops scaling: GIL) | `bench.py` |
+| Java client (same VM), 1 thread → 8 threads | **p50 115–120 µs** → **2.48 M calls/min**, p99 0.81 ms | `java -jar … bench` |
+| Go client (same VM), 1 → 8 callers | **p50 76 µs** → **3.12 M calls/min**, p99 0.37 ms | `probe load` |
 
 ## 1. Engine (in process)
 
@@ -102,18 +104,38 @@ These runs use the filesystem object store. With MongoDB and LocalStack S3 in `m
 
 On the VM run with all three services (MongoDB store, 1-second ticker), a change published at 10:31:18 showed in Go, Python and Java on the 10:31:20 tick. The unblock published at 10:31:30 showed by 10:31:33.
 
-## 5. Python and Java clients
+## 5. Python, Java and Go clients compared (second machine)
 
-**Not measured yet.** The benchmark programs exist and work:
+The cloud sandbox above cannot install `grpcio` or download Maven dependencies, so the three clients were compared on a second machine: a **Linux VM on the developer's Mac, arm64, 4 vCPU, 3 GiB RAM**, with Go 1.24.7, Python 3.10.12 + grpcio 1.85.1, and OpenJDK 17.0.21. The sidecar is isolated, as in section 2 (offline definitions, Unix socket `/tmp/gbx.sock`, 1% decision-log sampling). The load generator shares the 4 vCPUs with the sidecar. In every client, all threads share **one** client object, as a service would. Full setup and commands: [`benchmarks/vm-environment.txt`](benchmarks/vm-environment.txt).
 
-```bash
-# isolated sidecar on a short socket path
-bin/gearbox-sidecar --definitions-dir examples/definitions --allow-unsigned &   # GEARBOX_SOCKET=/tmp/gbx.sock
-python examples/python-service/bench.py --target unix:///tmp/gbx.sock --calls 5000 --threads 1,4,8
-java -jar examples/java-service/target/java-service.jar bench 5000 1,4,8        # GEARBOX_TARGET=unix:///tmp/gbx.sock
-```
+How:
+- **Go**: `probe load lead_routing in.json -c 1,4,8 -d 10s` (time-based, 10 s per level).
+- **Python**: `examples/python-service/bench.py --calls 10000 --threads 1,4,8`, 3 runs, plus one longer run of 80,000 calls at 4 threads.
+- **Java**: `java -jar java-service.jar bench 10000 1,4,8`, 3 runs after 2,000 warm-up calls, plus one longer run of 400,000 calls at 8 threads.
 
-The cloud sandbox where the other numbers were measured cannot install `grpcio` or download Maven dependencies. The machine that can build them was not reachable when these benchmarks ran. Until they are measured, the only Python and Java figures are functional: 5 of 5 Python integration tests and 2 of 2 Java tests passed against a real sidecar, and both example services picked up live changes in the VM demo above. No latency figure is claimed for them.
+Python and Java run without a fallback, so a failed call would abort its thread and the call count would fall short. Every run completed all its calls (0 errors). Raw output: [`vm-go.jsonl`](benchmarks/vm-go.jsonl), [`vm-python.jsonl`](benchmarks/vm-python.jsonl), [`vm-java.jsonl`](benchmarks/vm-java.jsonl).
+
+| Client | Threads | Calls/min (3 runs) | p50 | p95 | p99 |
+|---|---|---|---|---|---|
+| **Go** | 1 | 739,333 | 76 µs | 103 µs | 213 µs |
+| Go | 4 | 1,993,718 | 112 µs | 195 µs | 312 µs |
+| Go | 8 | **3,115,805** | 143 µs | 246 µs | 371 µs |
+| **Java** | 1 | 499,331 · 462,167 · 492,332 | 115–120 µs | 145–161 µs | 177–311 µs |
+| Java | 4 | 1,453,925 · 1,501,432 · 1,420,492 | 143–149 µs | 247–257 µs | 493–577 µs |
+| Java | 8 | 2,077,565 · 1,945,446 · 2,128,425 | 190–211 µs | 382–440 µs | 779–1,054 µs |
+| Java, 400,000 calls | 8 | **2,479,324** | 156 µs | 395 µs | 807 µs |
+| **Python** | 1 | 403,715 · 430,668 · 429,931 | 136–147 µs | 163–172 µs | 188–199 µs |
+| Python | 4 | 654,488 · 723,214 · 709,696 | 320–354 µs | 513–565 µs | 647–703 µs |
+| Python | 8 | 638,674 · 678,698 · 667,916 | 657–702 µs | 1,220–1,285 µs | 1,559–1,677 µs |
+| Python, 80,000 calls | 4 | **677,081** | 342 µs | 547 µs | 695 µs |
+
+How to read this:
+
+- **Single caller**: all three clients answer in 0.08–0.15 ms at the median and under 0.32 ms at p99. Go's 10-second run gives its p99 more room for outliers than the shorter Python and Java runs.
+- **Python stops scaling at about 4 threads (~0.7 M calls/min)**. Its latency then grows with the thread count: the GIL serializes request building and response parsing in the client. A Python service that needs more throughput should run more processes (each with its own client). More threads in one process won't help.
+- **Java scales to about 2–2.5 M calls/min at 8 threads**. The Java 10,000-call runs at 8 threads last only about 0.3 s, so they are noisier. The 400,000-call run (about 10 s) is the steadier figure.
+- **Go on this machine is about 3–4× faster than on the cloud sandbox** (739k vs 233k calls/min at 1 caller). The VM has twice the vCPUs and faster per-core performance. Compare numbers only within one machine.
+- Measured with the clients' default settings. No tuning was tried.
 
 ## 6. What is not benchmarked
 

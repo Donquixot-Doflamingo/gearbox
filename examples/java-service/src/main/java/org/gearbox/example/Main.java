@@ -39,6 +39,7 @@ public final class Main {
       return;
     }
     GearboxClient gearbox = GearboxClient.connect(target); // one client per process
+    warmUp(gearbox);
     String addr = System.getenv().getOrDefault("EXAMPLE_ADDR", "127.0.0.1:8083");
     int colon = addr.lastIndexOf(':');
     HttpServer server =
@@ -81,6 +82,22 @@ public final class Main {
       send(ex, 200, body);
     } catch (StatusRuntimeException e) { // caller error, e.g. input does not match lead_input
       send(ex, 422, "{\"error\":\"" + e.getStatus().getCode() + "\"}");
+    }
+  }
+
+  /**
+   * Opens the connection and JIT-compiles the call path before serving traffic. Without this
+   * the first request takes longer than the 5 ms deadline and returns the fallback.
+   */
+  static void warmUp(GearboxClient gearbox) {
+    DecideOptions warm = DecideOptions.unit("warm-up").timeout(Duration.ofSeconds(2));
+    for (int i = 0; i < 200; i++) {
+      try {
+        gearbox.decide("lead_routing", LEAD, warm);
+      } catch (RuntimeException e) { // sidecar not ready yet: serve anyway, the fallback covers it
+        System.out.println("warm-up: sidecar not answering (" + e.getMessage() + ")");
+        return;
+      }
     }
   }
 
