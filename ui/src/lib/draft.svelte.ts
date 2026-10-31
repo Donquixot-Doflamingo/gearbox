@@ -1,6 +1,7 @@
 // Editing state for one versioned resource: load, track changes, validate as you type, save with
 // optimistic concurrency (409 REVISION_CONFLICT), and cut versions.
 
+import { tick } from 'svelte';
 import { api } from './api';
 import { ApiError } from './api/client';
 import type { Resource, ResourceKind, ValidationProblem, ValidationResult } from './api/types.gen';
@@ -52,6 +53,14 @@ export class DraftEditor<S = unknown> {
     this.saved = this.snapshot();
     if (r.draft.validation) this.validation = r.draft.validation;
     this.version++;
+    // Editors fill in display defaults on first render (e.g. a select showing "build" for an unset
+    // transform mode). Those are not user edits, so take the baseline again once rendering settles.
+    const rev = this.revision;
+    void tick()
+      .then(() => tick())
+      .then(() => {
+        if (this.revision === rev && !this.saving) this.saved = this.snapshot();
+      });
   }
 
   async load(): Promise<void> {
