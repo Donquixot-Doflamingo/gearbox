@@ -102,7 +102,14 @@ scripts/demo/live-demo.sh
 | `DEMO_INTERVAL` / `DEMO_TICKS` | `1` / `100000` | Seconds between lines / number of lines |
 | `GEARBOX_RESTRICTED` | `0` | `1` sources `scripts/dev/restricted-env.sh` |
 
-The script uses fixed ports 8080, 9465, 9464, 8081, 8082 and 8083; they must be free.
+The script uses ports 8080 (control plane and UI), 9465, 9464, 8081, 8082 and 8083. It checks them first, on both 127.0.0.1 and [::1], and stops with a message if another program is listening. If another app already uses 8080, move the control plane and UI:
+
+```bash
+GEARBOX_DEMO_PORT=8090 make demo
+GEARBOX_API=http://127.0.0.1:8090/api/v1 scripts/demo/change.sh block Indore
+```
+
+Open the UI at `http://127.0.0.1:<port>`, not `localhost`: on macOS `localhost` can resolve to `[::1]` and reach a different program on the same port.
 
 Make a change from another terminal and watch the three columns flip from
 `standard/default` to `reject/city_not_served` with a new version:
