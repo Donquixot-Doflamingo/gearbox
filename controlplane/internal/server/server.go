@@ -140,6 +140,7 @@ func New(ctx context.Context, cfg Config, d Deps) (*Server, error) {
 		}
 	}
 	s.hmacKey = secret
+	engineapi.PIIKey = secret
 	s.hasher = auth.Hasher{Key: secret}
 	s.blobSig = objstore.Signer{Key: s.hasher.Derive("blob-url"), BaseURL: cfg.PublicURL + "/api/v1", Now: s.now}
 

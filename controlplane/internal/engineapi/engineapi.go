@@ -24,6 +24,15 @@ import (
 	"github.com/ORG/gearbox/engine/bundle"
 )
 
+// PIIKey is the installation HMAC key used for members of pii segments. The
+// server sets it at start-up (GEARBOX_HMAC_KEY_FILE) so evaluations in the
+// control plane hash keys exactly like the sidecars do.
+var PIIKey []byte
+
+func compileReal(set engine.Set) (*engine.Snapshot, error) {
+	return engine.CompileWithOptions(set, engine.CompileOptions{PIIKey: PIIKey})
+}
+
 // Engine is what the control plane needs from the engine package.
 type Engine interface {
 	Name() string
@@ -95,7 +104,7 @@ func (Real) ValidateDocument(s, d json.RawMessage) (bool, []engine.FieldError, e
 	return engine.ValidateDocument(s, d)
 }
 func (Real) Compile(set engine.Set) (Snapshot, error) {
-	s, err := engine.Compile(set)
+	s, err := compileReal(set)
 	if err != nil {
 		return nil, err
 	}
@@ -154,7 +163,7 @@ func (Hybrid) ValidateDocument(s, d json.RawMessage) (bool, []engine.FieldError,
 }
 
 func (Hybrid) Compile(set engine.Set) (Snapshot, error) {
-	s, err := engine.Compile(set)
+	s, err := compileReal(set)
 	if notImpl(err) {
 		return Lite{}.Compile(set)
 	}
