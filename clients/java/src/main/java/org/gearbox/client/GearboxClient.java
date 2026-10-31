@@ -7,8 +7,13 @@ import io.grpc.Status;
 import io.grpc.StatusRuntimeException;
 import io.grpc.netty.NettyChannelBuilder;
 import io.grpc.stub.MetadataUtils;
+import io.netty.channel.EventLoopGroup;
+import io.netty.channel.epoll.Epoll;
 import io.netty.channel.epoll.EpollDomainSocketChannel;
 import io.netty.channel.epoll.EpollEventLoopGroup;
+import io.netty.channel.kqueue.KQueue;
+import io.netty.channel.kqueue.KQueueDomainSocketChannel;
+import io.netty.channel.kqueue.KQueueEventLoopGroup;
 import io.netty.channel.unix.DomainSocketAddress;
 import java.nio.charset.StandardCharsets;
 import java.util.EnumSet;
@@ -35,37 +40,57 @@ public final class GearboxClient implements AutoCloseable {
   private static final Metadata.Key<String> REQUEST_ID =
       Metadata.Key.of("x-request-id", Metadata.ASCII_STRING_MARSHALLER);
 
-  /** Codes where the sidecar gave no answer: return the caller's fallback. */
-  private static final Set<Status.Code> FALLBACK_CODES =
-      EnumSet.of(
-          Status.Code.UNAVAILABLE,
-          Status.Code.DEADLINE_EXCEEDED,
-          Status.Code.FAILED_PRECONDITION, // NOT_READY
-          Status.Code.NOT_FOUND, // DECISION_NOT_FOUND
-          Status.Code.INTERNAL); // NODE_ERROR
+  /**
+   * Only caller errors (bad input) are thrown when a fallback is given. Every other failure —
+   * sidecar missing or restarting, deadline, unusable socket (UNKNOWN), NOT_READY,
+   * DECISION_NOT_FOUND, NODE_ERROR — means the sidecar could not answer: return the fallback.
+   */
+  private static final Set<Status.Code> CALLER_ERRORS = EnumSet.of(Status.Code.INVALID_ARGUMENT);
+
+  private static boolean useFallback(Status.Code code) {
+    return !CALLER_ERRORS.contains(code);
+  }
 
   private final ManagedChannel channel;
-  private final EpollEventLoopGroup group;
+  private final EventLoopGroup group;
   private final EngineServiceGrpc.EngineServiceBlockingStub stub;
 
-  private GearboxClient(ManagedChannel channel, EpollEventLoopGroup group) {
+  private GearboxClient(ManagedChannel channel, EventLoopGroup group) {
     this.channel = channel;
     this.group = group;
     this.stub = EngineServiceGrpc.newBlockingStub(channel);
   }
 
-  /** Connects to {@code unix:///path} (Linux, epoll) or {@code host:port} (loopback TCP). */
+  /**
+   * Connects to {@code unix:///path} (Linux: epoll, macOS: kqueue) or {@code host:port} (loopback
+   * TCP).
+   */
   public static GearboxClient connect(String target) {
     String t = (target == null || target.isEmpty()) ? DEFAULT_TARGET : target;
     if (t.startsWith("unix://")) {
-      EpollEventLoopGroup group = new EpollEventLoopGroup(1);
-      ManagedChannel ch =
-          NettyChannelBuilder.forAddress(new DomainSocketAddress(t.substring("unix://".length())))
-              .eventLoopGroup(group)
-              .channelType(EpollDomainSocketChannel.class)
-              .usePlaintext()
-              .build();
-      return new GearboxClient(ch, group);
+      DomainSocketAddress addr = new DomainSocketAddress(t.substring("unix://".length()));
+      if (Epoll.isAvailable()) {
+        EventLoopGroup group = new EpollEventLoopGroup(1);
+        return new GearboxClient(
+            NettyChannelBuilder.forAddress(addr)
+                .eventLoopGroup(group)
+                .channelType(EpollDomainSocketChannel.class)
+                .usePlaintext()
+                .build(),
+            group);
+      }
+      if (KQueue.isAvailable()) {
+        EventLoopGroup group = new KQueueEventLoopGroup(1);
+        return new GearboxClient(
+            NettyChannelBuilder.forAddress(addr)
+                .eventLoopGroup(group)
+                .channelType(KQueueDomainSocketChannel.class)
+                .usePlaintext()
+                .build(),
+            group);
+      }
+      throw new IllegalStateException(
+          "Unix sockets need Netty epoll (Linux) or kqueue (macOS); use a host:port target instead");
     }
     return new GearboxClient(NettyChannelBuilder.forTarget(t).usePlaintext().build(), null);
   }
@@ -97,7 +122,7 @@ public final class GearboxClient implements AutoCloseable {
           false,
           r.getRequestId());
     } catch (StatusRuntimeException e) {
-      if (o.fallbackJson != null && FALLBACK_CODES.contains(e.getStatus().getCode())) {
+      if (o.fallbackJson != null && useFallback(e.getStatus().getCode())) {
         return new Decision(o.fallbackJson, "", "", 0, false, true, rid);
       }
       throw e;
@@ -118,7 +143,7 @@ public final class GearboxClient implements AutoCloseable {
                   .build())
           .getValue();
     } catch (StatusRuntimeException e) {
-      if (FALLBACK_CODES.contains(e.getStatus().getCode())) {
+      if (useFallback(e.getStatus().getCode())) {
         return fallback;
       }
       throw e;
