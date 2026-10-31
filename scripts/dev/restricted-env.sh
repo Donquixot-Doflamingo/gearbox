@@ -8,6 +8,8 @@
 # Add a mirror: append "vanity/path => github.com/owner/repo vX.Y.Z" to MIRRORS.
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 MIRRORS=(
+  "google.golang.org/grpc/cmd/protoc-gen-go-grpc => github.com/grpc/grpc-go/cmd/protoc-gen-go-grpc v1.5.1"
+  "go.mongodb.org/mongo-driver/v2 => github.com/mongodb/mongo-go-driver/v2 v2.0.0"
   "google.golang.org/grpc => github.com/grpc/grpc-go v1.67.1"
   "google.golang.org/protobuf => github.com/protocolbuffers/protobuf-go v1.36.10"
   "google.golang.org/genproto/googleapis/rpc => github.com/googleapis/go-genproto/googleapis/rpc v0.0.0-20240814211410-ddb44dafa142"
