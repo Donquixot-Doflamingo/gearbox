@@ -17,7 +17,7 @@ Two to four lines: what to build and why.
 |---|---|
 | ID | `GBX-NNN`, never reused. IDs are grouped by area in blocks (engine 010–029, sidecar 030–039…); new tickets take the next free number in their block, or the next number after 119 |
 | Title | Imperative, one line |
-| Status | `todo` · `in progress` · `done` · `blocked` (say on what) |
+| Status | `todo` · `in progress` · `review` (built, needs verification on a machine with full network) · `partial` · `done` · `blocked` (say on what) |
 | Depends on | Ticket IDs that must be `done` first, or `–` |
 | Acceptance | Testable statements; a ticket is `done` when all hold and the code is merged |
 
