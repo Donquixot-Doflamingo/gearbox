@@ -20,14 +20,14 @@ except ImportError as exc:  # pragma: no cover - only when stubs are missing
 
 DEFAULT_TARGET = "unix:///var/run/gearbox/engine.sock"
 
-# Codes where the sidecar could not give an answer: use the fallback.
-_FALLBACK_CODES = {
-    grpc.StatusCode.UNAVAILABLE,
-    grpc.StatusCode.DEADLINE_EXCEEDED,
-    grpc.StatusCode.FAILED_PRECONDITION,  # NOT_READY
-    grpc.StatusCode.NOT_FOUND,  # DECISION_NOT_FOUND
-    grpc.StatusCode.INTERNAL,  # NODE_ERROR without a decision fallback
-}
+# Only caller errors (bad input) are raised when a fallback is given. Every other failure —
+# sidecar missing or restarting, deadline, socket path unusable (UNKNOWN), NOT_READY,
+# DECISION_NOT_FOUND, NODE_ERROR — means the sidecar could not answer: use the fallback.
+_CALLER_ERRORS = {grpc.StatusCode.INVALID_ARGUMENT}
+
+
+def _use_fallback(code: grpc.StatusCode) -> bool:
+    return code not in _CALLER_ERRORS
 
 
 class GearboxError(Exception):
@@ -98,7 +98,7 @@ class Client:
             )
         except grpc.RpcError as err:
             code = err.code()
-            if fallback is not None and code in _FALLBACK_CODES:
+            if fallback is not None and _use_fallback(code):
                 return Decision(output=fallback, from_client_fallback=True, request_id=rid)
             raise GearboxError(code, err.details() or "") from err
         return Decision(
@@ -121,7 +121,7 @@ class Client:
                 timeout=timeout if timeout is not None else self._default_timeout)
             return resp.value
         except grpc.RpcError as err:
-            if fallback is not None and err.code() in _FALLBACK_CODES:
+            if fallback is not None and _use_fallback(err.code()):
                 return fallback
             raise GearboxError(err.code(), err.details() or "") from err
 
