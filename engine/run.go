@@ -386,7 +386,7 @@ func (c *compiled) decide(ctx context.Context, req Request, input any, decoded b
 	}
 	now := req.Now
 	if now.IsZero() {
-		now = start
+		now = start.UTC()
 	}
 	r := c.getRun(ctx, now, req.UnitID, req.RequestID)
 	r.trace, r.debug, r.ai = req.Trace || req.Debug, req.Debug, req.AI
