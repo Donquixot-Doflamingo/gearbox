@@ -56,9 +56,24 @@ class Handler(BaseHTTPRequestHandler):
         pass
 
 
+WARM_LEAD = {"lead": {"id": "warm-up", "city": "Pune", "source": "web"},
+             "car": {"make": "Hyundai", "model": "i20", "year": 2021, "km": 12000, "price": 690000}}
+
+
+def warm_up() -> None:
+    """Connect the channel before serving, so the first request does not miss the 5 ms deadline."""
+    for _ in range(50):
+        try:
+            CLIENT.decide("lead_routing", WARM_LEAD, unit_id="warm-up", timeout=2.0)
+        except Exception as e:  # sidecar not ready: serve anyway, the fallback covers it
+            log.warning("warm-up: sidecar not answering (%s)", e)
+            return
+
+
 def main() -> None:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(message)s")
     host, _, port = os.environ.get("EXAMPLE_ADDR", "127.0.0.1:8082").rpartition(":")
+    warm_up()
     srv = ThreadingHTTPServer((host or "0.0.0.0", int(port)), Handler)
     log.info("listening on %s:%s, sidecar %s", host, port, os.environ.get("GEARBOX_TARGET", "unix:///var/run/gearbox/engine.sock"))
     srv.serve_forever()

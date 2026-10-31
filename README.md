@@ -74,7 +74,7 @@ Step by step: [docs/06 · Setup and examples guide](docs/06-setup-and-examples-g
 
 ## Measured performance
 
-Measured on a **2-vCPU shared cloud sandbox**, with the load generator on the same CPUs. The full method, every run and the raw files are in **[docs/07 · Benchmarks](docs/07-benchmarks.md)**.
+Measured on a **2-vCPU shared cloud sandbox** (client comparison: a 4-vCPU arm64 VM). In both, the load generator ran on the same CPUs as the sidecar. The full method, every run and the raw files are in **[docs/07 · Benchmarks](docs/07-benchmarks.md)**.
 
 | What | Result |
 |---|---|
@@ -85,7 +85,7 @@ Measured on a **2-vCPU shared cloud sandbox**, with the load generator on the sa
 | Sustained 60 s at 8 callers | 693,705 calls, p99 2.9 ms, 0 errors |
 | Publish (build + test + sign + upload) | median 17.4 ms |
 | Publish → sidecar serving the new version | median 4.4 ms with jitter off; 0.45–1.97 s with the default 2 s anti-thundering-herd jitter |
-| Python and Java client latency | not measured yet |
+| Clients compared on a 4-vCPU arm64 VM | Go p50 76 µs, up to 3.12 M calls/min · Java p50 115 µs, up to 2.48 M/min · Python p50 136 µs, ~0.68 M/min (GIL-bound beyond 4 threads) |
 
 ## Before production
 

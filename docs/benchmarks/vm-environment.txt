@@ -1,0 +1,12 @@
+Machine: Linux VM on the developer's Mac, arm64, 4 vCPU, 3 GiB RAM, kernel 6.8 (Ubuntu 22.04)
+Go 1.24.7 linux/arm64 · Python 3.10.12, grpcio 1.85.1 · OpenJDK 17.0.21, Maven 3.9.9
+Sidecar: bin/gearbox-sidecar --definitions-dir examples/definitions --allow-unsigned
+         GEARBOX_SOCKET=/tmp/gbx.sock GEARBOX_LOG_SINK=stdout GEARBOX_LOG_SAMPLE=0.01
+Load generator on the same 4 vCPUs as the sidecar. Input: the lead in examples/python-service/bench.py.
+Go:     bin/probe -target unix:///tmp/gbx.sock load lead_routing in.json -c 1,4,8 -d 10s
+Python: python examples/python-service/bench.py --target unix:///tmp/gbx.sock --calls 10000 --threads 1,4,8   (3 runs)
+        python examples/python-service/bench.py --target unix:///tmp/gbx.sock --calls 80000 --threads 4
+Java:   java -jar examples/java-service/target/java-service.jar bench 10000 1,4,8   (3 runs, GEARBOX_TARGET=unix:///tmp/gbx.sock)
+        java -jar examples/java-service/target/java-service.jar bench 400000 8
+All three share one client across threads. Python and Java runs have no fallback set, so any failed
+call would abort its thread and the call count would fall short; every count equals the requested calls.
