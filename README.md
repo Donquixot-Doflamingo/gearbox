@@ -2,42 +2,96 @@
 
 Gearbox is a low-latency decision engine. Teams author **decisions** — rule sets, decision tables, JSON transforms and small decision graphs, with segments, lookups, feature gates, experiments and AI steps — against **registered, versioned schemas**, review and approve them, and publish them as **signed bundles**. A Go **sidecar** next to every service evaluates them in microseconds over gRPC on a Unix socket. Every answer carries the exact version and dependency hash that produced it, so any logged call can be replayed.
 
+![Publishing a change in the UI; the service picks it up within about a second](docs/assets/ui-demo.gif)
+
+## How it works
+
+```mermaid
+flowchart LR
+  subgraph Authoring
+    UI["Admin UI"]
+    CTL["gearboxctl / API"]
+  end
+  subgraph CP["Control plane: gearbox-server"]
+    API["HTTP API (OpenAPI, 67 operations)"]
+    PUB["Publisher: compile, run tests, sign"]
+  end
+  DB[("MongoDB")]
+  OBJ[("S3 / LocalStack")]
+  subgraph POD["Every pod"]
+    SVC["Your service + client (Go / Python / Java)"]
+    SC["gearbox-sidecar"]
+  end
+  UI --> API
+  CTL --> API
+  API <--> DB
+  API --> PUB --> OBJ
+  SC -- "push feed (SSE) + poll" --> API
+  SC -- "signed bundle" --> OBJ
+  SVC -- "gRPC on a Unix socket" --> SC
+  SC -- "decision + update logs" --> API
 ```
- Admin UI / gearboxctl ──HTTP/JSON──▶ gearbox-server ──signed bundle──▶ S3 ──▶ gearbox-sidecar ◀──gRPC (Unix socket)── your service
-                                        (control plane)                         (in every pod)
+
+1. **Author**: in the UI, register schemas, then build decisions (rules, tables, transforms, graphs) and segments, gates and experiments. A rules node cannot be saved without registered input and output schemas.
+2. **Review**: cut a version, then open a change request. It shows the diff (including added and removed segment members) and runs every decision's tests. Approvals depend on the environment.
+3. **Publish**: the control plane compiles everything into one bundle, runs the tests again, signs it (Ed25519) and uploads it to S3. The generation number goes up by one.
+4. **Sync**: each sidecar is told about the new generation, downloads the bundle, checks the signature and hash, compiles it, runs its tests and swaps atomically. If anything fails, it keeps serving the previous version. It also keeps a copy on disk, so it starts even when the control plane is down.
+5. **Decide**: your service calls the sidecar with a deadline and a fallback. Every answer carries the decision version, dependency hash and generation that produced it.
+
+```mermaid
+sequenceDiagram
+  actor Admin
+  participant CP as Control plane
+  participant S3
+  participant SC as Sidecar
+  participant App as Your service
+  Admin->>CP: Publish change request
+  CP->>CP: compile + test + sign bundle
+  CP->>S3: upload
+  CP-->>SC: new generation (SSE)
+  SC->>S3: download
+  SC->>SC: verify, compile, test, swap
+  App->>SC: Decide(lead_routing, input)
+  SC-->>App: output + version + generation
 ```
 
-## Status (v1 build, 2026-10-31)
+Step by step: [docs/06 · Setup and examples guide](docs/06-setup-and-examples-guide.md).
 
-Everything in the contracts is built in one pass by four parallel workstreams and merged on this branch.
+## Status (v1, 2026-10-31)
 
-| Part | State | Verified here |
+| Part | State | Verified |
 |---|---|---|
-| Engine | Complete: schema registry rules, JSON Schema subset, 35 operators, segment / gate / variant / Expr conditions, all node types, rollouts, dependency hash, tests, cost and PII checks, signed bundles | `go test -race` green (189 runs + fuzz); old service's bucketing fixtures pass |
-| Sidecar | Complete except OTLP export | End-to-end test (fake control plane → sync → Decide over Unix socket → swap); real run against `gearbox-server` |
-| Go client | Complete | Tests against an in-process sidecar |
-| Control plane + `gearboxctl` | All 67 API operations, memory / file / MongoDB stores, filesystem / S3 object stores, publishing, approvals, rollouts, rollback, kill switch, SSE feed, OIDC + dev auth | Every response checked against the OpenAPI spec; seeded server answers `lead_routing`; rule without schema → `422 SCHEMA_REQUIRED` |
-| Admin UI (SvelteKit) | Every screen, mock mode with sample data | `svelte-check` 0 errors / 0 warnings, 58 Vitest tests, `vite build` OK |
-| Docs, tickets, deploy | 4 docs, 98 tickets, Dockerfiles, compose, Helm | Charts rendered, compose config valid |
-| **End to end** | `make e2e`: MongoDB 7 + LocalStack S3 in Docker → server (dev auth, no sign-in) → signed bundle in S3 → sidecar → example Go service + `gearbox-probe` test client. Proves every control-plane change reaches the sidecar: decision version, segment members, gate, kill switch, experiment, 50 %→100 % rollout, rollback; plus logs and outages | **37/37 checks pass** (3 runs in a row); MongoDB and S3 suites pass |
-| Client libraries | Go (full), Python (thin wrapper), Java (thin wrapper) | Go: tests + e2e. Python: 5 tests against a real sidecar. Java: not run (no Maven here) |
+| Engine | Schema registry rules, JSON Schema subset (nested, nullable), 35 operators, segment / gate / variant / Expr conditions, all node types, rollouts, dependency hash, tests, cost and PII checks, signed bundles | `go test -race`, fuzz, staticcheck; the old service's bucketing fixtures pass |
+| Sidecar | Complete except OpenTelemetry export | unit tests + `make e2e` |
+| Control plane + `gearboxctl` | All 67 API operations; memory / file / MongoDB stores; filesystem / S3 object stores; approvals, rollouts, rollback, kill switch, SSE feed; OIDC + local dev auth | every response checked against the OpenAPI file; MongoDB and S3 (LocalStack) suites |
+| Admin UI (SvelteKit) | Every screen | `svelte-check` 0/0, 58 tests, build OK; all 29 screens opened against the real server with 0 browser errors; UI publish flow recorded ([GIF](docs/assets/ui-demo.gif)) |
+| Go client | Complete | tests + `make e2e` |
+| Python client | Thin wrapper | 5 tests against a real sidecar |
+| Java client | Thin wrapper (Maven, Java 17) | 2 tests passed with Maven 3.9.9 + JDK 17 on Linux arm64 |
+| Example services | Go, Python, Java (`POST /route`) + `gearbox-probe` | all three picked up a live change published in the control plane ([guide §3](docs/06-setup-and-examples-guide.md#3-make-a-change-and-watch-the-services-pick-it-up)) |
+| **End to end** | `make e2e`: MongoDB 7 + LocalStack S3 → server (dev auth) → signed bundle in S3 → sidecar → Go service + probe. Covers decision version, segment members, gate, kill switch, experiment, rollout 50 % → 100 %, rollback, logs, control plane down, restart from disk, client fallback | **37/37 checks pass** (3 runs in a row) |
+| AI decisions | Placeholder node and Hub contract only | excluded from this release |
 
-### Measured performance (2 vCPU, JSON decode excluded)
+## Measured performance
 
-| Benchmark | Result | Target |
-|---|---|---|
-| One 7-condition rule | 1.28 µs | ≤ 2 µs |
-| 12-field transform | 11.0 µs | ≤ 25 µs |
-| 50-rule first match | 3.56 µs | ≤ 30 µs |
-| `lead_routing` graph | 9.3 µs | – |
-| Full call: client → Unix socket → sidecar (`make bench-sidecar`) | p50 ≈ 0.22–0.26 ms, p99 0.66–0.85 ms on 2 shared vCPUs | p99 < 1 ms |
+Measured on a **2-vCPU shared cloud sandbox**, with the load generator on the same CPUs. The full method, every run and the raw files are in **[docs/07 · Benchmarks](docs/07-benchmarks.md)**.
 
-### First steps
+| What | Result |
+|---|---|
+| `lead_routing` graph, in-process engine | 9.6–10.1 µs |
+| One 7-condition rule | 1.29–1.43 µs |
+| Full call: Go client → Unix socket → sidecar, 1 caller | p50 212–254 µs, p99 577–753 µs (one 54.6 ms outlier in 15,000 calls) |
+| Throughput, one sidecar | 233,201 calls/min at 1 caller · 716,432 at 8 · 945,521 at 32 (p99 6.2 ms), 0 errors |
+| Sustained 60 s at 8 callers | 693,705 calls, p99 2.9 ms, 0 errors |
+| Publish (build + test + sign + upload) | median 17.4 ms |
+| Publish → sidecar serving the new version | median 4.4 ms with jitter off; 0.45–1.97 s with the default 2 s anti-thundering-herd jitter |
+| Python and Java client latency | not measured yet |
+
+## Before production
 
 1. Fill in the Integration Hub contract in `contracts/openapi/integration-hub-ai.yaml` (placeholder).
-2. Review `contracts/CHANGES-REQUESTED.md` (small contract fixes the workstreams asked for) — GBX-002.
-
-Known gaps: OpenTelemetry export (GBX-123), AI cache/budget enforcement and shadow answers in decision logs (GBX-122), AI `precompute` mode, OIDC sign-in not exercised (local runs use `GEARBOX_AUTH_MODE=dev`, which skips sign-in).
+2. Review `contracts/CHANGES-REQUESTED.md` (GBX-002).
+3. Known gaps: OpenTelemetry export (GBX-123), AI cache and budget enforcement (GBX-122), OIDC sign-in not yet tested against a real identity provider (local runs use `GEARBOX_AUTH_MODE=dev`), and benchmarks on production hardware.
 
 ## Repository map
 
@@ -50,8 +104,9 @@ Known gaps: OpenTelemetry export (GBX-123), AI cache/budget enforcement and shad
 | [`gen/go/`](gen/go/) | Generated Go code for the protos | `agent/dataplane` |
 | [`controlplane/`](controlplane/) | `gearbox-server` (HTTP API, publisher, feed) and `gearboxctl` (CLI) | `agent/controlplane` |
 | [`ui/`](ui/) | SvelteKit admin UI | `agent/ui` |
-| [`clients/java/`](clients/java/), [`clients/python/`](clients/python/) | Thin wrappers (need stub generation) | `agent/docs` |
-| [`examples/`](examples/) | `lead_service` definitions and a Go service calling the sidecar | `agent/docs` |
+| [`clients/java/`](clients/java/), [`clients/python/`](clients/python/) | Thin wrappers (Maven / pip; stubs generated) | `agent/docs` |
+| [`scripts/demo/`](scripts/demo/) | Live demo, change script, UI walkthrough recorder | `agent/docs` |
+| [`examples/`](examples/) | `lead_service` definitions; the same service in [Go](examples/go-service/), [Python](examples/python-service/) and [Java](examples/java-service/); [`probe`](examples/probe/) test and load client | `agent/docs` |
 | [`deploy/`](deploy/) | Dockerfiles, docker compose, Helm charts, local dev script | `agent/docs` |
 | [`docs/`](docs/), [`tickets/`](tickets/) | Documentation and the ticket list | `agent/docs` |
 
@@ -77,7 +132,9 @@ Sidecar only, from YAML files, no server:
 make sidecar-offline                       # gearbox-sidecar --definitions-dir examples/definitions --allow-unsigned --watch
 ```
 
-End to end against MongoDB and LocalStack S3 (needs Docker): `make e2e`. Isolated sidecar latency: `make bench-sidecar`. Requirement-by-requirement proof: [docs/05-requirements-traceability.md](docs/05-requirements-traceability.md).
+Live demo with Go, Python and Java services side by side: `make demo`, then change something in the UI at http://127.0.0.1:8080 or run `scripts/demo/change.sh block Indore`. See [the guide](docs/06-setup-and-examples-guide.md#2-run-everything-locally).
+
+End to end against MongoDB and LocalStack S3 (needs Docker): `make e2e`. Benchmarks: `make bench-engine bench-sidecar bench-load bench-propagation`. Requirement-by-requirement proof: [docs/05-requirements-traceability.md](docs/05-requirements-traceability.md).
 
 Other targets: `make build`, `make test`, `make vet`, `make ui`, `make gen`, `make check-names`, `make images` (`make help` lists all). In a network-restricted sandbox prefix them with `GEARBOX_RESTRICTED=1` (see [`scripts/dev/restricted-env.sh`](scripts/dev/restricted-env.sh)).
 
@@ -90,6 +147,9 @@ Other targets: `make build`, `make test`, `make vet`, `make ui`, `make gen`, `ma
 | [docs/02-user-stories.md](docs/02-user-stories.md) | Personas, user stories, acceptance criteria |
 | [docs/03-implementation-guide.md](docs/03-implementation-guide.md) | Architecture, engine semantics, bundles, security, observability, standards, local dev, testing |
 | [docs/04-reference.md](docs/04-reference.md) | Sidecar setup, all settings, gRPC API, operators, Expr, error codes, metrics |
+| [docs/05-requirements-traceability.md](docs/05-requirements-traceability.md) | Each requirement, where it is built, how it is proven |
+| [docs/06-setup-and-examples-guide.md](docs/06-setup-and-examples-guide.md) | Run everything locally, add the sidecar to a service (Go / Python / Java), UI walkthrough, MongoDB contents |
+| [docs/07-benchmarks.md](docs/07-benchmarks.md) | Measured numbers, method and raw data |
 | [tickets/TICKETS.md](tickets/TICKETS.md) | Work list for the whole system |
 
 ## Rules for contributors

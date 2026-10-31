@@ -1,0 +1,11 @@
+{"release": 1, "generation": 2, "publishMs": 15.9, "swapMs": 4.3}
+{"release": 2, "generation": 3, "publishMs": 16.6, "swapMs": 7.5}
+{"release": 3, "generation": 4, "publishMs": 16.0, "swapMs": 3.3}
+{"release": 4, "generation": 5, "publishMs": 18.3, "swapMs": 4.6}
+{"release": 5, "generation": 6, "publishMs": 15.7, "swapMs": 7.7}
+{"release": 6, "generation": 7, "publishMs": 19.9, "swapMs": 6.0}
+{"release": 7, "generation": 8, "publishMs": 19.1, "swapMs": 3.9}
+{"release": 8, "generation": 9, "publishMs": 16.1, "swapMs": 4.6}
+{"release": 9, "generation": 10, "publishMs": 18.4, "swapMs": 4.1}
+{"release": 10, "generation": 11, "publishMs": 21.9, "swapMs": 3.7}
+{"summary": true, "releases": 10, "publishMs": {"min": 15.7, "median": 17.4, "max": 21.9}, "swapMs": {"min": 3.3, "median": 4.4, "max": 7.7}}

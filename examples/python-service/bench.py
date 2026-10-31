@@ -5,6 +5,7 @@
 
 import argparse
 import json
+import os
 import statistics
 import threading
 import time
@@ -20,22 +21,20 @@ def pct(xs, p):
     return xs[min(len(xs) - 1, int(p * (len(xs) - 1)))]
 
 
-def run(target, calls, threads):
+def run(client, calls, threads):
+    """calls split over `threads` threads that share one client (one client per process, as in a service)."""
     lat, lock = [], threading.Lock()
     per = calls // threads
 
     def worker(i):
-        c = Client(target, default_timeout=2.0)
         mine = []
         for n in range(per):
             t0 = time.perf_counter()
-            c.decide("lead_routing", LEAD, unit_id=f"u{i}-{n}")
+            client.decide("lead_routing", LEAD, unit_id=f"u{i}-{n}", timeout=2.0)
             mine.append((time.perf_counter() - t0) * 1e6)
         with lock:
             lat.extend(mine)
 
-    for _ in range(200):  # warm up
-        Client(target, default_timeout=2.0).decide("lead_routing", LEAD, unit_id="warm")
     t0 = time.perf_counter()
     ts = [threading.Thread(target=worker, args=(i,)) for i in range(threads)]
     [t.start() for t in ts]
@@ -49,9 +48,12 @@ def run(target, calls, threads):
 
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
-    ap.add_argument("--target", default="unix:///tmp/gbx.sock")
+    ap.add_argument("--target", default=os.environ.get("GEARBOX_TARGET", "unix:///tmp/gbx.sock"))
     ap.add_argument("--calls", type=int, default=5000)
     ap.add_argument("--threads", default="1,4,8")
     a = ap.parse_args()
+    client = Client(a.target, default_timeout=2.0)
+    for _ in range(500):  # warm up the channel
+        client.decide("lead_routing", LEAD, unit_id="warm")
     for t in [int(x) for x in a.threads.split(",")]:
-        print(json.dumps(run(a.target, a.calls, t)))
+        print(json.dumps(run(client, a.calls, t)))

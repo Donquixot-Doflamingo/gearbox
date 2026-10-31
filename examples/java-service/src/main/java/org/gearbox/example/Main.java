@@ -51,6 +51,10 @@ public final class Main {
   }
 
   static void route(HttpExchange ex, GearboxClient gearbox) throws IOException {
+    if (!ex.getRequestURI().getPath().equals("/route")) { // contexts match by prefix
+      send(ex, 404, "{\"error\":\"not found\"}");
+      return;
+    }
     if (!ex.getRequestMethod().equals("POST")) {
       send(ex, 405, "{\"error\":\"POST only\"}");
       return;
@@ -62,17 +66,40 @@ public final class Main {
       Decision d =
           gearbox.decide("lead_routing", lead,
               DecideOptions.unit(unit).timeout(Duration.ofMillis(5)).fallback(FALLBACK));
-      String out = d.outputJson().trim();
+      String out = d.outputJson() == null ? "" : d.outputJson().trim();
+      String meta =
+          String.format(
+              "\"version\":%s,\"dependencyHash\":%s,\"generation\":%d,\"fallbackUsed\":%b,\"fromClientFallback\":%b,\"service\":\"java\"}",
+              quote(d.version()), quote(d.dependencyHash()), d.generation(), d.fallbackUsed(), d.fromClientFallback());
+      // Merge the decision's fields when the output is a non-empty JSON object (as the Go and
+      // Python examples do); otherwise nest it under "output".
       String body =
-          out.substring(0, out.length() - 1)
-              + String.format(
-                  ",\"version\":\"%s\",\"dependencyHash\":\"%s\",\"generation\":%d,\"fallbackUsed\":%b,\"fromClientFallback\":%b,\"service\":\"java\"}",
-                  d.version(), d.dependencyHash(), d.generation(), d.fallbackUsed(), d.fromClientFallback());
+          out.startsWith("{") && out.endsWith("}") && !out.substring(1, out.length() - 1).isBlank()
+              ? out.substring(0, out.length() - 1) + "," + meta
+              : "{\"output\":" + (out.isEmpty() ? "null" : out) + "," + meta;
       System.out.printf("route version=%s generation=%d fallback=%b%n", d.version(), d.generation(), d.fromClientFallback());
       send(ex, 200, body);
     } catch (StatusRuntimeException e) { // caller error, e.g. input does not match lead_input
       send(ex, 422, "{\"error\":\"" + e.getStatus().getCode() + "\"}");
     }
+  }
+
+  /** A JSON string literal (null stays null). */
+  static String quote(String s) {
+    if (s == null) return "null";
+    StringBuilder b = new StringBuilder("\"");
+    for (char c : s.toCharArray()) {
+      switch (c) {
+        case '"': b.append("\\\""); break;
+        case '\\': b.append("\\\\"); break;
+        case '\n': b.append("\\n"); break;
+        case '\r': b.append("\\r"); break;
+        case '\t': b.append("\\t"); break;
+        default:
+          if (c < 0x20) b.append(String.format("\\u%04x", (int) c)); else b.append(c);
+      }
+    }
+    return b.append('"').toString();
   }
 
   static void send(HttpExchange ex, int code, String body) throws IOException {

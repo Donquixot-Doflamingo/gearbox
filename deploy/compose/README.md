@@ -7,17 +7,52 @@ Runs the whole system locally: control plane, S3 (MinIO), MongoDB, Redis, one si
 | `keygen` | One-shot: `gearboxctl keys generate` writes the dev signing key and `trusted-keys.txt` into the `keys` volume (skipped if present) | – |
 | `minio` + `minio-init` | S3-compatible object store; creates bucket `gearbox-bundles` | 9000 (API), 9001 (console, `gearbox` / `gearbox-dev-secret`) |
 | `mongo` | MongoDB, used when `GEARBOX_STORE=mongo` | 27017 |
-| `redis` | Change-feed fan-out | 6379 |
-| `server` | `gearbox-server --seed` with the UI; dev auth (no OIDC) | 8080 (API + UI), 9465 (metrics) |
+| `redis` | Change-feed fan-out (`GEARBOX_REDIS_URL`) | 6379 |
+| `server` | `gearbox-server --seed` with the UI; dev auth (no OIDC) | 8080 (API + UI), 9465 on the host → 9464 in the container (metrics) |
 | `sidecar` | `gearbox-sidecar` for `lead_service` / `dev`, synced from the server, bytes from MinIO | 9464 (metrics, `/readyz`) |
 | `lead-service` | `examples/go-service` calling the sidecar over the shared Unix socket | 8081 |
 
-## Start
+## How it works
+
+```mermaid
+flowchart LR
+    keygen["keygen (one-shot)<br/>gearboxctl keys generate"]
+    minit["minio-init (one-shot)<br/>mc mb gearbox-bundles"]
+    minio[("minio :9000 / :9001")]
+    mongo[("mongo :27017")]
+    redis[("redis :6379")]
+    server["server :8080<br/>gearbox-server --seed + UI"]
+    sidecar["sidecar<br/>metrics :9464"]
+    lead["lead-service :8081<br/>examples/go-service"]
+    keys[("volume keys")]
+    sock[("volume socket<br/>/var/run/gearbox")]
+    keygen -- "signing.key, trusted-keys.txt" --> keys
+    minit --> minio
+    keys -. ro .-> server
+    keys -. ro .-> sidecar
+    server -- "store (GEARBOX_STORE=mongo)" --> mongo
+    server -- "change feed" --> redis
+    server -- "upload signed bundle" --> minio
+    sidecar -- "head / feed / heartbeat / decision logs<br/>http://server:8080" --> server
+    sidecar -- "presigned GET http://minio:9000" --> minio
+    sidecar --- sock
+    lead -- "gRPC unix:///var/run/gearbox/engine.sock" --> sock
+```
+
+Start order is enforced with `depends_on`: `keygen` and `minio-init` must
+finish, `mongo` and `redis` must be healthy before `server` starts; `sidecar`
+starts after `server`; `lead-service` waits until `sidecar` is healthy
+(`gearbox-sidecar healthcheck`, which calls `/readyz`).
+
+## Setup and run
+
+### Start
 
 ```bash
 cd deploy/compose
-docker compose up --build            # memory store (data is lost on restart)
+docker compose up --build                       # memory store (data is lost on restart)
 GEARBOX_STORE=mongo docker compose up --build   # keep data in MongoDB
+# or from the repository root: make compose-up
 ```
 
 What happens:
@@ -28,14 +63,14 @@ What happens:
 4. `sidecar` fetches the head from the server, downloads the bundle from MinIO, verifies it with `trusted-keys.txt`, compiles it, runs its tests and becomes healthy.
 5. `lead-service` starts once the sidecar is healthy.
 
-## Try it
+### Try it
 
 ```bash
 curl -s -XPOST localhost:8081/route -d @../../examples/go-service/sample-lead.json
 # {"route":"standard","reason":"default","version":"lead_routing@1","dependencyHash":"sha256:…","generation":1,...}
 
 curl -s localhost:9464/readyz                    # sidecar readiness
-open http://localhost:8080                        # admin UI (signed in as the dev admin)
+open http://localhost:8080                        # admin UI (signed in as the dev user, no OIDC)
 curl -s localhost:8080/api/v1/apps/lead_service/environments/dev/sidecars   # fleet (dev auth)
 ```
 
