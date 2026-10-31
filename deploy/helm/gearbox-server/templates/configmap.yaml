@@ -1,0 +1,14 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "gearbox-server.fullname" . }}
+  labels:
+    {{- include "gearbox-server.labels" . | nindent 4 }}
+data:
+  GEARBOX_HTTP_ADDR: ":{{ .Values.service.port }}"
+  GEARBOX_METRICS_ADDR: ":{{ .Values.service.metricsPort }}"
+  {{- range $k, $v := .Values.config }}
+  {{- if ne (toString $v) "" }}
+  {{ $k }}: {{ $v | toString | quote }}
+  {{- end }}
+  {{- end }}

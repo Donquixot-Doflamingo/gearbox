@@ -1,0 +1,15 @@
+kind: schemas
+name: eligibility_output
+version: 1
+description: Result of the eligibility rules
+spec:
+  jsonSchema:
+    type: object
+    required: [eligible, reason]
+    properties:
+      eligible: { type: boolean }
+      lane: { enum: [fast, standard] }
+      reason: { type: string }
+  examples:
+    - { eligible: true, lane: fast, reason: fast_lane }
+    - { eligible: false, reason: car_too_old }

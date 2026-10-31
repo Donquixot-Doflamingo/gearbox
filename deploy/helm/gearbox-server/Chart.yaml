@@ -1,0 +1,6 @@
+apiVersion: v2
+name: gearbox-server
+description: Gearbox control plane (HTTP API, publisher, change feed, admin UI).
+type: application
+version: 0.1.0
+appVersion: "1.0.0"

@@ -1,0 +1,21 @@
+# syntax=docker/dockerfile:1.7
+# examples/go-service: tiny HTTP service that calls the sidecar.
+#   docker build -f deploy/docker/Dockerfile.example -t gearbox-example:dev .
+ARG GO_VERSION=1.24
+
+FROM golang:${GO_VERSION}-bookworm AS build
+ARG GEARBOX_RESTRICTED=0
+WORKDIR /src
+COPY . .
+RUN --mount=type=cache,target=/go/pkg/mod --mount=type=cache,target=/root/.cache/go-build \
+    set -e; \
+    if [ "$GEARBOX_RESTRICTED" = "1" ]; then . scripts/dev/restricted-env.sh; fi; \
+    cd examples/go-service; \
+    GOWORK=off GOFLAGS=-mod=mod CGO_ENABLED=0 go build -trimpath -ldflags "-s -w" -o /out/go-service .
+
+FROM gcr.io/distroless/static-debian12:nonroot
+COPY --from=build /out/go-service /go-service
+COPY examples/go-service/sample-lead.json /sample-lead.json
+USER 65532:65532
+EXPOSE 8081
+ENTRYPOINT ["/go-service"]
