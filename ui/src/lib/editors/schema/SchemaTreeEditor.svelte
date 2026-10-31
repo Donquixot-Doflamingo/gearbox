@@ -6,8 +6,8 @@
 
   let { value = $bindable(), disabled = false, rootLabel = 'root' }: { value: JsonSchema; disabled?: boolean; rootLabel?: string } = $props();
 
-  let selected: SchemaPath = $state([]);
-  let closed: Record<string, boolean> = $state({});
+  let selected = $state<SchemaPath>([]);
+  let closed = $state<Record<string, boolean>>({});
 
   // keep the selection valid after deletes/renames
   $effect(() => {

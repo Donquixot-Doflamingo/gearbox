@@ -17,6 +17,8 @@
   import { session } from '$lib/stores/session.svelte';
 
   let { app, name }: { app: string; name: string } = $props();
+  // Routes remount this editor per resource ({#key}), so reading the props once is intended.
+  // svelte-ignore state_referenced_locally
   const ed = new DraftEditor<LayerSpec>(app, 'layers', name);
   void ed.load();
   $effect(() => {

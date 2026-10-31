@@ -15,9 +15,9 @@
     errors = [],
   }: { value: unknown; schema: JsonSchema | null | undefined; label?: string; disabled?: boolean; allowExpr?: boolean; errors?: { path: string; message: string }[] } = $props();
 
-  let mode: 'form' | 'json' = $state('form');
+  let mode = $state<'form' | 'json'>('form');
   let isObject = $derived(!!schema && primaryType(schema) === 'object' && isObj(schema.properties));
-  let props = $derived(isObject ? Object.entries(schema!.properties as Record<string, JsonSchema>) : []);
+  let propEntries = $derived(isObject ? Object.entries(schema!.properties as Record<string, JsonSchema>) : []);
   let req = $derived(isObject && Array.isArray(schema!.required) ? (schema!.required as string[]) : []);
   let obj = $derived(isObj(value) ? (value as Record<string, unknown>) : {});
 
@@ -52,7 +52,7 @@
     <JsonEditor bind:value rows={6} {disabled} allowUndefined />
     {#if !schema}<span class="hint">No output schema: edit the value as JSON.</span>{/if}
   {:else if isObject}
-    {#each props as [k, ps] (k)}
+    {#each propEntries as [k, ps] (k)}
       <DataField schema={ps} root={schema} value={obj[k]} name={k} required={req.includes(k)} {disabled} {allowExpr} error={[...errors, ...local].find((e) => e.path === `/${k}`)?.message} onchange={(v) => setChild(k, v)} />
     {/each}
     {#if value === undefined}<span class="hint">Not set.</span>{/if}

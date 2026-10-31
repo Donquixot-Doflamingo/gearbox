@@ -27,11 +27,11 @@
 
   const COLOR: Record<string, string> = { rules: '--t-rules', table: '--t-table', transform: '--t-transform', switch: '--t-switch', ai: '--t-ai', output: '--t-output', lookup: '--t-lookup', gate: '--t-gate', experiment: '--t-experiment', subdecision: '--t-subdecision' };
 
-  let svg: SVGSVGElement | undefined = $state();
+  let svg = $state<SVGSVGElement | undefined>();
   let pos = $derived(positions(spec));
   let edges = $derived(edgesOf(spec));
   let size = $derived(canvasSize(pos));
-  let selectedEdge: string | null = $state(null);
+  let selectedEdge = $state<string | null>(null);
   let dragging: { id: string; dx: number; dy: number; moved: boolean } | null = $state(null);
   let linking: { from: string; kind: 'next' | 'error'; x: number; y: number; over: string | null } | null = $state(null);
   let onPath = $derived(new Set(pathIds));

@@ -17,7 +17,7 @@
   let description = $state('');
   let owners = $state('');
   let limit = $state(64);
-  let err: ApiError | null = $state(null);
+  let err = $state<ApiError | null>(null);
   let busy = $state(false);
   $effect(() => {
     const a = info.data;

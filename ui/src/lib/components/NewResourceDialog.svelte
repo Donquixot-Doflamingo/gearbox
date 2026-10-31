@@ -25,7 +25,7 @@
   let name = $state('');
   let description = $state('');
   let busy = $state(false);
-  let err: ApiError | null = $state(null);
+  let err = $state<ApiError | null>(null);
   const NAME = /^[a-z][a-z0-9_]{1,62}$/;
   let nameProblem = $derived(name && !NAME.test(name) ? 'Use a–z, 0–9 and _, start with a letter, 2–63 characters.' : null);
 

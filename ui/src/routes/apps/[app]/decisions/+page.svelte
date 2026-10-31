@@ -29,8 +29,8 @@
   // new decision
   let creating = $state(false);
   let shape = $state('rules');
-  let inputSchema: SchemaRef | undefined = $state();
-  let outputSchema: SchemaRef | undefined = $state();
+  let inputSchema = $state<SchemaRef | undefined>();
+  let outputSchema = $state<SchemaRef | undefined>();
   let needsSchemas = $derived(shape === 'rules' || shape === 'table');
 
   function buildSpec(): DecisionSpec {

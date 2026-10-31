@@ -32,7 +32,7 @@
   let title = $derived(path.length === 0 ? 'Root' : propName ?? (path[path.length - 1] === 'items' ? 'Array items' : path.join('.')));
 
   let nameDraft = $state('');
-  let nameError: string | null = $state(null);
+  let nameError = $state<string | null>(null);
   $effect(() => {
     nameDraft = propName ?? '';
     nameError = null;
@@ -83,7 +83,7 @@
   }
 
   let defaultText = $derived(node.default === undefined ? '' : JSON.stringify(node.default));
-  let defaultError: string | null = $state(null);
+  let defaultError = $state<string | null>(null);
   function setDefault(text: string): void {
     if (text.trim() === '') {
       defaultError = null;

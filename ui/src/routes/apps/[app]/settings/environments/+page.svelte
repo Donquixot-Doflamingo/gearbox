@@ -12,7 +12,7 @@
 
   let app = $derived(page.params.app ?? '');
   const envs = query(() => api.listEnvironments({ app }).then((r) => r.items));
-  let drafts: Record<string, EnvironmentPolicy> = $state({});
+  let drafts = $state<Record<string, EnvironmentPolicy>>({});
   $effect(() => {
     for (const e of envs.data ?? []) if (!drafts[e.name]) drafts[e.name] = { ...e.policy };
   });

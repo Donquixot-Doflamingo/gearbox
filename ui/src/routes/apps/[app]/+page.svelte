@@ -73,7 +73,7 @@
               <div class="main">
                 <a class="mono" href={appHref(`/changes/${r.id}`)}>{r.id}</a>
                 <span>{r.title}</span>
-                <span class="meta">by {r.author} · {r.tests ? `${r.tests.passed} of ${r.tests.passed + (r.tests.failed ?? 0)} tests passed` : 'no tests'} · {relTime(r.createdAt)}</span>
+                <span class="meta">by {r.author} · {r.tests ? `${r.tests.passed ?? 0} of ${(r.tests.passed ?? 0) + (r.tests.failed ?? 0)} tests passed` : 'no tests'} · {relTime(r.createdAt)}</span>
               </div>
               <span class="pill {r.environment === 'prod' ? 'pill-crit' : 'pill-muted'}">to {r.environment}</span>
             </li>

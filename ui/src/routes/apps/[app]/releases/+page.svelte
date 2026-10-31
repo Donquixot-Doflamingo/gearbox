@@ -74,7 +74,7 @@
       toastError(e, 'Rollout not changed');
     }
   }
-  let customPct: Record<string, number> = $state({});
+  let customPct = $state<Record<string, number>>({});
 
   // rollback to a generation
   let target = $state(0);
@@ -101,7 +101,7 @@
   }
 
   // data release
-  let picked: Record<string, number> = $state({});
+  let picked = $state<Record<string, number>>({});
   let dataItems = $derived(Object.entries(picked).filter(([, v]) => v > 0).map(([k, v]) => {
     const [kind, name] = k.split('/');
     return { kind: kind as ResourceKind, name, version: v } satisfies ChangeItem;
@@ -119,7 +119,7 @@
     }
   }
 
-  let open: number | null = $state(null);
+  let open = $state<number | null>(null);
   const manifest = query(() => (open ? api.getRelease({ app, env, generation: open }) : Promise.resolve(null)));
 </script>
 

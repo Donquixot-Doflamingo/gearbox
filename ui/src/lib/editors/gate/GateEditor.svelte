@@ -26,6 +26,8 @@
   import { toast, toastError } from '$lib/stores/toast.svelte';
 
   let { app, name }: { app: string; name: string } = $props();
+  // Routes remount this editor per resource ({#key}), so reading the props once is intended.
+  // svelte-ignore state_referenced_locally
   const ed = new DraftEditor<GateSpec>(app, 'gates', name);
   void ed.load();
   $effect(() => {

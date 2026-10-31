@@ -14,7 +14,8 @@
     onchange,
   }: { value: string; id?: string; placeholder?: string; disabled?: boolean; multiline?: boolean; error?: string | null; label?: string; onchange?: (v: string) => void } = $props();
 
-  const uid = id ?? `expr-${Math.random().toString(36).slice(2, 8)}`;
+  const fallbackId = `expr-${Math.random().toString(36).slice(2, 8)}`;
+  let uid = $derived(id ?? fallbackId);
   let touched = $state(false);
   let syntax = $derived(touched && value?.trim() ? syntaxError(value) : null);
   let msg = $derived(error ?? (syntax ? `Check the syntax: ${syntax}` : null));

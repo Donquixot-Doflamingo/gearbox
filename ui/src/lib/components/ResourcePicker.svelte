@@ -16,7 +16,8 @@
     onchange,
   }: { app: string; kind: ResourceKind; value: string; label: string; id?: string; disabled?: boolean; error?: string | null; hint?: string; filter?: (s: { name: string; subtype?: string }) => boolean; onchange?: (v: string) => void } = $props();
 
-  const uid = id ?? `res-${Math.random().toString(36).slice(2, 8)}`;
+  const fallbackId = `res-${Math.random().toString(36).slice(2, 8)}`;
+  let uid = $derived(id ?? fallbackId);
   let list = $derived((registry.list(app, kind) ?? []).filter((s) => !filter || filter(s)));
   let loaded = $derived(registry.list(app, kind) !== undefined);
 </script>

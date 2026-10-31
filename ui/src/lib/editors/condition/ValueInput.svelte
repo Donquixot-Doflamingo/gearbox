@@ -14,16 +14,21 @@
     onchange,
   }: { op: FieldOperator; field: FieldInfo | undefined; value: unknown; valueTo: unknown; disabled?: boolean; id?: string; onchange: (value: unknown, valueTo: unknown) => void } = $props();
 
-  const uid = id ?? `val-${Math.random().toString(36).slice(2, 8)}`;
+  const fallbackId = `val-${Math.random().toString(36).slice(2, 8)}`;
+  let uid = $derived(id ?? fallbackId);
   let info = $derived(operatorInfo(op));
   let kind = $derived(info?.valueKind ?? 'scalar');
   let enumVals = $derived((field?.enum ?? []).filter((v) => v !== null));
   let useEnum = $derived(enumVals.length > 0 && (kind === 'scalar' || kind === 'list') && !info?.valueType);
   let isBool = $derived(field?.type === 'boolean' && kind === 'scalar');
 
+  // Local text state starts from the props; the effect below re-syncs it when they change.
+  // svelte-ignore state_referenced_locally
   let text = $state(valueText(value));
+  // svelte-ignore state_referenced_locally
   let textTo = $state(valueText(valueTo));
-  let error: string | null = $state(null);
+  let error = $state<string | null>(null);
+  // svelte-ignore state_referenced_locally
   let last = JSON.stringify([value, valueTo]);
 
   $effect(() => {

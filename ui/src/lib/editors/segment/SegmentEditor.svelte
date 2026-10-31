@@ -26,6 +26,8 @@
   import { toast, toastError } from '$lib/stores/toast.svelte';
 
   let { app, name }: { app: string; name: string } = $props();
+  // Routes remount this editor per resource ({#key}), so reading the props once is intended.
+  // svelte-ignore state_referenced_locally
 
   const ed = new DraftEditor<SegmentSpec>(app, 'segments', name);
   void ed.load();
@@ -60,7 +62,7 @@
   });
   let paste = $state('');
   let uploading = $state(false);
-  let uploadError: unknown = $state(null);
+  let uploadError = $state<unknown>(null);
 
   async function upload(body: string | { members: string[] }): Promise<void> {
     uploading = true;
@@ -94,9 +96,9 @@
   // membership check
   let checkSource = $state('draft');
   let checkKey = $state('');
-  let checkAttrs: unknown = $state(undefined);
+  let checkAttrs = $state<unknown>(undefined);
   let checkResult: { member: boolean; reason?: string } | null = $state(null);
-  let checkError: unknown = $state(null);
+  let checkError = $state<unknown>(null);
   $effect(() => {
     if (checkAttrs === undefined && attrSchema) checkAttrs = exampleFor(attrSchema);
   });

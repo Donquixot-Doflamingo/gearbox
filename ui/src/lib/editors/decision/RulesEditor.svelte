@@ -16,7 +16,7 @@
   let inSchema = $derived(registry.schema(app, r.inputSchema?.name, r.inputSchema?.version));
   let outSchema = $derived(registry.schema(app, r.outputSchema?.name, r.outputSchema?.version));
   let fields = $derived(inSchema ? listFields(inSchema) : null);
-  let selectedId: string | null = $state(null);
+  let selectedId = $state<string | null>(null);
   let selIndex = $derived(Math.max(0, (r.rules ?? []).findIndex((x) => x.id === selectedId)));
   let rule = $derived((r.rules ?? [])[selIndex] as Rule | undefined);
 

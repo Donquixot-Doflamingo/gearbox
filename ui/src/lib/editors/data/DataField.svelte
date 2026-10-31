@@ -36,12 +36,12 @@
   let nullable = $derived(isNullable(s));
   let enumVals = $derived(Array.isArray(s.enum) ? (s.enum as unknown[]).filter((v) => v !== null) : null);
   let isExpr = $derived(isExprSlot(value));
-  let props = $derived(isObj(s.properties) ? Object.entries(s.properties as Record<string, JsonSchema>) : []);
+  let propEntries = $derived(isObj(s.properties) ? Object.entries(s.properties as Record<string, JsonSchema>) : []);
   let req = $derived(Array.isArray(s.required) ? (s.required as string[]) : []);
   let obj = $derived(isObj(value) ? (value as Record<string, unknown>) : {});
 
   let numText = $state('');
-  let numError: string | null = $state(null);
+  let numError = $state<string | null>(null);
   // follow outside changes without rewriting what is being typed ("5." stays "5.")
   $effect(() => {
     const v = value;
@@ -82,7 +82,7 @@
   }
 
   let arrText = $state('');
-  let arrError: string | null = $state(null);
+  let arrError = $state<string | null>(null);
   $effect(() => {
     const v = value;
     if (t !== 'array' || isExpr) return;
@@ -122,8 +122,8 @@
   <div class="v">
     {#if isExpr}
       <ExprInput value={String(value).slice(1)} id={uid} {disabled} placeholder="input.reason" onchange={(v) => onchange('=' + v)} />
-    {:else if t === 'object' && props.length}
-      <span class="hint" style="padding-top:8px">{value === undefined ? 'not set' : `${Object.keys(obj).length} of ${props.length} set`}</span>
+    {:else if t === 'object' && propEntries.length}
+      <span class="hint" style="padding-top:8px">{value === undefined ? 'not set' : `${Object.keys(obj).length} of ${propEntries.length} set`}</span>
       {#if value === undefined && !disabled}<button type="button" class="btn btn-xs" onclick={() => onchange({})}>Set</button>{/if}
     {:else if enumVals}
       <select id={uid} {disabled} value={value === undefined ? '__unset' : JSON.stringify(value)} onchange={(e) => onchange(e.currentTarget.value === '__unset' ? undefined : JSON.parse(e.currentTarget.value))} aria-invalid={error ? 'true' : undefined}>
@@ -147,14 +147,14 @@
       <input id={uid} type="text" {disabled} value={typeof value === 'string' ? displayString(value) : value === undefined || value === null ? '' : JSON.stringify(value)} oninput={(e) => onchange(e.currentTarget.value === '' && !required ? undefined : literalString(e.currentTarget.value))} placeholder={required ? 'required' : 'not set'} aria-invalid={error ? 'true' : undefined} />
       {#if nullable}<button type="button" class="mode-toggle" aria-pressed={value === null} {disabled} onclick={() => onchange(value === null ? undefined : null)}>null</button>{/if}
     {/if}
-    {#if allowExpr && !disabled && !(t === 'object' && props.length && !isExpr)}
+    {#if allowExpr && !disabled && !(t === 'object' && propEntries.length && !isExpr)}
       <button type="button" class="mode-toggle" aria-pressed={isExpr} onclick={isExpr ? toLiteral : toExpr} title={isExpr ? 'Back to a literal value' : 'Compute this value with an expression ("=…")'}>=</button>
     {/if}
     {#if numError || arrError || error}<span class="error-text" style="flex-basis:100%">{numError ?? arrError ?? error}</span>{/if}
   </div>
-  {#if t === 'object' && props.length && !isExpr && value !== undefined}
+  {#if t === 'object' && propEntries.length && !isExpr && value !== undefined}
     <div class="data-nest">
-      {#each props as [k, ps] (k)}
+      {#each propEntries as [k, ps] (k)}
         <DataField schema={ps} {root} value={obj[k]} name={k} required={req.includes(k)} {disabled} {allowExpr} depth={depth + 1} onchange={(v) => setChild(k, v)} />
       {/each}
     </div>

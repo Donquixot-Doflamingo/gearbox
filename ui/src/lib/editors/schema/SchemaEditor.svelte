@@ -18,6 +18,8 @@
   import SchemaTreeEditor from './SchemaTreeEditor.svelte';
 
   let { app, name }: { app: string; name: string } = $props();
+  // Routes remount this editor per resource ({#key}), so reading the props once is intended.
+  // svelte-ignore state_referenced_locally
 
   const ed = new DraftEditor<SchemaSpec>(app, 'schemas', name);
   void ed.load();
@@ -39,10 +41,10 @@
 
   // validate a document
   let docVersion = $state('draft');
-  let doc: unknown = $state({});
+  let doc = $state<unknown>({});
   let docResult: { valid: boolean; errors: { path: string; message: string }[] } | null = $state(null);
   let docBusy = $state(false);
-  let docError: unknown = $state(null);
+  let docError = $state<unknown>(null);
   async function checkDoc(): Promise<void> {
     docBusy = true;
     docError = null;

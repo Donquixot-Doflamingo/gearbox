@@ -16,7 +16,8 @@
     onchange,
   }: { app: string; value: SchemaRef | undefined; label: string; id?: string; required?: boolean; disabled?: boolean; error?: string | null; hint?: string; onchange?: (v: SchemaRef | undefined) => void } = $props();
 
-  const uid = id ?? `schema-${Math.random().toString(36).slice(2, 8)}`;
+  const fallbackId = `schema-${Math.random().toString(36).slice(2, 8)}`;
+  let uid = $derived(id ?? fallbackId);
   let list = $derived(registry.list(app, 'schemas'));
   let current = $derived(list?.find((s) => s.name === value?.name));
   let versions = $derived(current ? Array.from({ length: current.latestVersion }, (_, i) => current!.latestVersion - i) : []);

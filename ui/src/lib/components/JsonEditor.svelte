@@ -22,9 +22,10 @@
     onchange?: (v: unknown) => void;
   } = $props();
 
-  const uid = id ?? `json-${Math.random().toString(36).slice(2, 8)}`;
+  const fallbackId = `json-${Math.random().toString(36).slice(2, 8)}`;
+  let uid = $derived(id ?? fallbackId);
   let text = $state(fmt(value));
-  let parseError: string | null = $state(null);
+  let parseError = $state<string | null>(null);
   let lastEmitted: string = JSON.stringify(value ?? null);
 
   function fmt(v: unknown): string {

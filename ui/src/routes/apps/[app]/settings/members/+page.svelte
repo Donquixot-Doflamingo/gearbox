@@ -17,9 +17,9 @@
   let open = $state(false);
   let email = $state('');
   let name = $state('');
-  let role: Role = $state('author');
+  let role = $state<Role>('author');
   let apps = $state('');
-  let err: ApiError | null = $state(null);
+  let err = $state<ApiError | null>(null);
 
   async function add(): Promise<void> {
     err = null;

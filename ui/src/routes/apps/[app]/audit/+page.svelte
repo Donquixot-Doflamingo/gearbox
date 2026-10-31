@@ -15,7 +15,7 @@
   let actor = $derived(qp('actor') ?? '');
   let all = $derived(qp('scope') === 'all');
   const list = new Paged<AuditEvent>((cursor) => api.listAudit({ query: { app: all ? undefined : app, actor: actor || undefined, cursor, limit: 50 } }));
-  let open: string | null = $state(null);
+  let open = $state<string | null>(null);
   const LABEL: Record<string, string> = {
     'resource.created': 'Created', 'draft.saved': 'Saved draft', 'version.cut': 'Cut version', 'change_request.opened': 'Opened change request',
     'change_request.approved': 'Approved change request', 'change_request.rejected': 'Requested changes', 'change_request.withdrawn': 'Withdrew change request',

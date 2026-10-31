@@ -22,7 +22,7 @@
   let open = $state(false);
   let env = $state('prod');
   let label = $state('');
-  let secret: string | null = $state(null);
+  let secret = $state<string | null>(null);
   let busy = $state(false);
 
   async function create(): Promise<void> {

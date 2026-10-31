@@ -17,7 +17,7 @@
   const list = query(() => api.listResources({ app, kind: 'lookups', query: { q: q || undefined, limit: 200 } }));
   let creating = $state(false);
   let keyType = $state<'string' | 'number'>('string');
-  let valueSchema: SchemaRef | undefined = $state();
+  let valueSchema = $state<SchemaRef | undefined>();
   const buildSpec = (): LookupSpec => ({ keyType, valueSchema: valueSchema! });
 </script>
 

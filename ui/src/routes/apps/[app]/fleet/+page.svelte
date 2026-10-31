@@ -15,7 +15,7 @@
 
   let app = $derived(page.params.app ?? '');
   let env = $derived(currentEnv());
-  let summary: FleetSummary | null = $state(null);
+  let summary = $state<FleetSummary | null>(null);
   const list = new Paged<Sidecar>((cursor) =>
     api.listSidecars({ app, env, query: { cursor, limit: 50 } }).then((r) => {
       summary = r.summary;
