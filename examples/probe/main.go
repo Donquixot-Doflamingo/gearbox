@@ -41,7 +41,7 @@ func run(args []string) error {
 	}
 	rest := global.Args()
 	if len(rest) == 0 {
-		return fmt.Errorf("usage: gearbox-probe [-target T] status|decide|gate|variant|bench ...")
+		return fmt.Errorf("usage: gearbox-probe [-target T] status|decide|gate|variant|bench|load")
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()

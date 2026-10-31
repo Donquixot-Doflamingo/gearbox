@@ -51,12 +51,6 @@ var opValueKind = map[string]opKind{
 	"EXISTS": vkNone, "NOT_EXISTS": vkNone, "IS_TRUE": vkNone, "IS_FALSE": vkNone,
 }
 
-// condCtx carries what conditions need besides the scope.
-type condCtx struct {
-	sc *scope
-	// defaultKeyUnit: rollout segments without key use ctx.unit.
-}
-
 // cond compiles a Condition. Returns nil (with problems) on error.
 func (b *builder) cond(raw json.RawMessage, path string, sc *scope) condFn {
 	var v any

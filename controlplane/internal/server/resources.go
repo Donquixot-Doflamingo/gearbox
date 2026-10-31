@@ -725,23 +725,23 @@ func (s *Server) handleGetVersion(w http.ResponseWriter, r *http.Request, p *Pri
 	return nil
 }
 
-// specAt returns the spec for "draft" or a version number.
-func (s *Server) specAt(ctx context.Context, rec model.ResourceRecord, which string) (json.RawMessage, error) {
+// specAndDataAt also returns the data reference (segment members / lookup rows).
+func (s *Server) specAndDataAt(ctx context.Context, rec model.ResourceRecord, which string) (json.RawMessage, *model.DataRef, error) {
 	if which == "draft" {
-		return viewSpec(rec.Kind, rec.Draft.Spec, rec.Draft.Data), nil
+		return viewSpec(rec.Kind, rec.Draft.Spec, rec.Draft.Data), rec.Draft.Data, nil
 	}
 	n, err := strconv.ParseInt(which, 10, 64)
 	if err != nil || n < 1 {
-		return nil, errInvalid("from/to must be a version number or \"draft\"")
+		return nil, nil, errInvalid("from/to must be a version number or \"draft\"")
 	}
 	v, err := s.loadVersion(ctx, rec.App, rec.Kind, rec.Name, n)
 	if errors.Is(err, store.ErrNotFound) {
-		return nil, errNotFound("%s/%s has no version %d.", rec.Kind, rec.Name, n)
+		return nil, nil, errNotFound("%s/%s has no version %d.", rec.Kind, rec.Name, n)
 	}
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	return viewSpec(v.Kind, v.Spec, v.Data), nil
+	return viewSpec(v.Kind, v.Spec, v.Data), v.Data, nil
 }
 
 func (s *Server) handleDiff(w http.ResponseWriter, r *http.Request, p *Principal) error {
@@ -751,15 +751,16 @@ func (s *Server) handleDiff(w http.ResponseWriter, r *http.Request, p *Principal
 		return err
 	}
 	from, to := r.URL.Query().Get("from"), r.URL.Query().Get("to")
-	a, err := s.specAt(ctx, rec, from)
+	a, ad, err := s.specAndDataAt(ctx, rec, from)
 	if err != nil {
 		return err
 	}
-	b, err := s.specAt(ctx, rec, to)
+	b, bd, err := s.specAndDataAt(ctx, rec, to)
 	if err != nil {
 		return err
 	}
 	unified, changes := diffSpecs(a, b, fmt.Sprintf("%s/%s@%s", rec.Kind, rec.Name, from), fmt.Sprintf("%s/%s@%s", rec.Kind, rec.Name, to))
+	unified += s.membersDiff(ctx, rec.Kind, ad, bd)
 	writeJSON(w, http.StatusOK, map[string]any{"unified": unified, "changes": changes})
 	return nil
 }

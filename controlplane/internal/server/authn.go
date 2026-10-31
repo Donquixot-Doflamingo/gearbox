@@ -8,7 +8,6 @@ import (
 	"encoding/hex"
 	"errors"
 	"net/http"
-	"net/url"
 	"slices"
 	"strings"
 	"time"
@@ -315,13 +314,4 @@ func (s *Server) handleGetSession(w http.ResponseWriter, r *http.Request, p *Pri
 	}
 	writeJSON(w, http.StatusOK, model.Session{Member: m, CSRFToken: csrf})
 	return nil
-}
-
-// absoluteURL joins the public URL and a path.
-func (s *Server) absoluteURL(path string) string {
-	u, err := url.Parse(s.cfg.PublicURL)
-	if err != nil {
-		return path
-	}
-	return u.JoinPath(path).String()
 }

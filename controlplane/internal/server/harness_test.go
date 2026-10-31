@@ -199,10 +199,6 @@ type harness struct {
 
 type harnessOpt func(*Config, *Deps)
 
-func withEngine(e engineapi.Engine) harnessOpt {
-	return func(_ *Config, d *Deps) { d.Engine = e }
-}
-
 func newHarness(t *testing.T, opts ...harnessOpt) *harness {
 	t.Helper()
 	ts := httptest.NewUnstartedServer(nil)

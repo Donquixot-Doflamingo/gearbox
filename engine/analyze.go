@@ -188,14 +188,13 @@ type elemCtx struct {
 }
 
 type walker struct {
-	b      *builder
-	sc     *scope
-	path   string
-	info   *exprInfo
-	lets   []string
-	elems  []elemCtx
-	mult   float64
-	inPred int
+	b     *builder
+	sc    *scope
+	path  string
+	info  *exprInfo
+	lets  []string
+	elems []elemCtx
+	mult  float64
 }
 
 // expr compiles a code slot with static checks. ok=false means it did not

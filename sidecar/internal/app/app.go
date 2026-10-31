@@ -49,7 +49,6 @@ type App struct {
 	health  *health.Server
 	ready   chan struct{}
 	once    sync.Once
-	logOut  *os.File
 	metrics net.Listener
 }
 

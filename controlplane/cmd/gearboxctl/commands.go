@@ -852,7 +852,7 @@ func cmdRelease(ctx context.Context, o *opts, sub string, w io.Writer) error {
 			items = append(items, it)
 		}
 		if len(items) == 0 {
-			return errors.New("usage: release data <kind>/<name>@<v>...")
+			return errors.New("usage: release data <kind>/<name>@<version> [more items]")
 		}
 		body["type"], body["items"] = "data", items
 	case "rollout":
