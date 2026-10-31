@@ -33,7 +33,7 @@ MIRRORS=(
 mkdir -p "$ROOT/.gowork-mirrors"
 {
   echo "go 1.24"; echo; echo "use ("
-  for m in engine sidecar controlplane clients/go gen/go; do [ -f "$ROOT/$m/go.mod" ] && echo "	$ROOT/$m"; done
+  for m in engine sidecar controlplane clients/go gen/go examples/go-service; do [ -f "$ROOT/$m/go.mod" ] && echo "	$ROOT/$m"; done
   echo ")"; echo; echo "replace ("
   for m in "${MIRRORS[@]}"; do echo "	$m"; done
   echo ")"

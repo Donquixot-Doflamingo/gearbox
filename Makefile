@@ -73,3 +73,7 @@ images: ## Build container images
 .PHONY: clean
 clean: ## Remove build output and local data
 	rm -rf $(BIN) .data
+
+.PHONY: e2e
+e2e: ## End-to-end test: MongoDB + LocalStack S3 (Docker) → server → S3 bundle → sidecar → example service
+	scripts/integration/e2e.sh
