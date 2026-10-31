@@ -6,7 +6,8 @@
 //	gearbox-probe decide <decision> <input.json|-> [-unit ID] [-now RFC3339]
 //	gearbox-probe gate <gate> [-unit ID]
 //	gearbox-probe variant <experiment> -unit ID
-//	gearbox-probe bench <decision> <input.json> [-n 2000]   # client-side latency
+//	gearbox-probe bench <decision> <input.json> [-n 2000]   # client-side latency, one caller
+//	gearbox-probe load  <decision> <input.json> [-c 1,4,8,16] [-d 10s]   # throughput and latency under concurrency
 package main
 
 import (
@@ -17,6 +18,9 @@ import (
 	"io"
 	"os"
 	"sort"
+	"strconv"
+	"strings"
+	"sync"
 	"time"
 
 	gearbox "github.com/ORG/gearbox/clients/go"
@@ -52,6 +56,8 @@ func run(args []string) error {
 	unit := fs.String("unit", "", "unit ID for rollouts and experiments")
 	now := fs.String("now", "", "ctx.now (RFC3339)")
 	n := fs.Int("n", 2000, "bench: number of calls")
+	conc := fs.String("c", "1,4,8,16", "load: concurrency levels")
+	dur := fs.Duration("d", 10*time.Second, "load: duration per level")
 	pos, err := parseInterleaved(fs, rest)
 	if err != nil {
 		return err
@@ -127,8 +133,79 @@ func run(args []string) error {
 		sort.Slice(lat, func(i, j int) bool { return lat[i] < lat[j] })
 		q := func(p float64) float64 { return float64(lat[int(p*float64(len(lat)-1))].Microseconds()) }
 		return out(map[string]any{"calls": *n, "p50Micros": q(0.50), "p95Micros": q(0.95), "p99Micros": q(0.99), "maxMicros": q(1)})
+	case "load":
+		if len(pos) != 2 {
+			return fmt.Errorf("load <decision> <input.json>")
+		}
+		input, err := readInput(pos[1])
+		if err != nil {
+			return err
+		}
+		raw, _ := json.Marshal(input)
+		var levels []int
+		for _, f := range strings.Split(*conc, ",") {
+			v, err := strconv.Atoi(strings.TrimSpace(f))
+			if err != nil || v < 1 {
+				return fmt.Errorf("bad -c %q", *conc)
+			}
+			levels = append(levels, v)
+		}
+		for _, c0 := range levels {
+			res := loadLevel(c, pos[0], json.RawMessage(raw), c0, *dur)
+			if err := out(res); err != nil {
+				return err
+			}
+		}
+		return nil
 	}
 	return fmt.Errorf("unknown command %q", cmd)
+}
+
+// loadLevel runs `workers` goroutines calling Decide in a loop for d (after a short warm-up)
+// over one shared client, like a service would, and reports real throughput and latency.
+func loadLevel(c *gearbox.Client, decision string, input json.RawMessage, workers int, d time.Duration) map[string]any {
+	ctx := context.Background()
+	for i := 0; i < 500; i++ {
+		_, _ = c.Decide(ctx, decision, input, gearbox.WithUnit("warm"), gearbox.WithTimeout(2*time.Second))
+	}
+	var mu sync.Mutex
+	var all []time.Duration
+	var errs int64
+	deadline := time.Now().Add(d)
+	var wg sync.WaitGroup
+	start := time.Now()
+	for w := 0; w < workers; w++ {
+		wg.Add(1)
+		go func(w int) {
+			defer wg.Done()
+			lat := make([]time.Duration, 0, 1<<16)
+			var e int64
+			for i := 0; time.Now().Before(deadline); i++ {
+				t0 := time.Now()
+				if _, err := c.Decide(ctx, decision, input, gearbox.WithUnit(fmt.Sprintf("w%d-%d", w, i)), gearbox.WithTimeout(2*time.Second)); err != nil {
+					e++
+					continue
+				}
+				lat = append(lat, time.Since(t0))
+			}
+			mu.Lock()
+			all = append(all, lat...)
+			errs += e
+			mu.Unlock()
+		}(w)
+	}
+	wg.Wait()
+	wall := time.Since(start)
+	sort.Slice(all, func(i, j int) bool { return all[i] < all[j] })
+	q := func(p float64) int64 {
+		if len(all) == 0 {
+			return 0
+		}
+		return all[int(p*float64(len(all)-1))].Microseconds()
+	}
+	return map[string]any{"client": "go", "concurrency": workers, "seconds": wall.Seconds(), "calls": len(all), "errors": errs,
+		"perSecond": int(float64(len(all)) / wall.Seconds()), "perMinute": int(float64(len(all)) / wall.Seconds() * 60),
+		"p50Micros": q(0.50), "p95Micros": q(0.95), "p99Micros": q(0.99), "maxMicros": q(1)}
 }
 
 // parseInterleaved accepts flags before or after positional arguments.
