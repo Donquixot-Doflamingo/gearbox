@@ -9,3 +9,7 @@ ui/.svelte-kit/
 ui/build/
 .env
 .data/
+clients/python/gen/
+clients/python/*.egg-info/
+__pycache__/
+.pytest_cache/
