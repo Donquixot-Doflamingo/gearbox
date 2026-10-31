@@ -77,3 +77,7 @@ clean: ## Remove build output and local data
 .PHONY: e2e
 e2e: ## End-to-end test: MongoDB + LocalStack S3 (Docker) → server → S3 bundle → sidecar → example service
 	scripts/integration/e2e.sh
+
+.PHONY: bench-sidecar
+bench-sidecar: ## Client → Unix socket → sidecar latency (isolated, offline definitions; 3 × 5,000 calls)
+	scripts/integration/bench-sidecar.sh

@@ -19,7 +19,8 @@ Everything in the contracts is built in one pass by four parallel workstreams an
 | Control plane + `gearboxctl` | All 67 API operations, memory / file / MongoDB stores, filesystem / S3 object stores, publishing, approvals, rollouts, rollback, kill switch, SSE feed, OIDC + dev auth | Every response checked against the OpenAPI spec; seeded server answers `lead_routing`; rule without schema → `422 SCHEMA_REQUIRED` |
 | Admin UI (SvelteKit) | Every screen, mock mode with sample data | `svelte-check` 0 errors / 0 warnings, 58 Vitest tests, `vite build` OK |
 | Docs, tickets, deploy | 4 docs, 98 tickets, Dockerfiles, compose, Helm | Charts rendered, compose config valid |
-| **End to end** | `make e2e`: MongoDB 7 + LocalStack S3 in Docker → server (dev auth, no sign-in) → signed bundle in S3 → sidecar → example Go service; publish, swap, rollback, logs, outages | **18/18 checks pass**; MongoDB and S3 integration suites pass |
+| **End to end** | `make e2e`: MongoDB 7 + LocalStack S3 in Docker → server (dev auth, no sign-in) → signed bundle in S3 → sidecar → example Go service + `gearbox-probe` test client. Proves every control-plane change reaches the sidecar: decision version, segment members, gate, kill switch, experiment, 50 %→100 % rollout, rollback; plus logs and outages | **37/37 checks pass** (3 runs in a row); MongoDB and S3 suites pass |
+| Client libraries | Go (full), Python (thin wrapper), Java (thin wrapper) | Go: tests + e2e. Python: 5 tests against a real sidecar. Java: not run (no Maven here) |
 
 ### Measured performance (2 vCPU, JSON decode excluded)
 
@@ -29,7 +30,7 @@ Everything in the contracts is built in one pass by four parallel workstreams an
 | 12-field transform | 11.0 µs | ≤ 25 µs |
 | 50-rule first match | 3.56 µs | ≤ 30 µs |
 | `lead_routing` graph | 9.3 µs | – |
-| Full call: client → Unix socket → sidecar | ≈ 126 µs | p99 < 1 ms |
+| Full call: client → Unix socket → sidecar (`make bench-sidecar`) | p50 ≈ 0.22–0.26 ms, p99 0.66–0.85 ms on 2 shared vCPUs | p99 < 1 ms |
 
 ### First steps
 
@@ -76,7 +77,7 @@ Sidecar only, from YAML files, no server:
 make sidecar-offline                       # gearbox-sidecar --definitions-dir examples/definitions --allow-unsigned --watch
 ```
 
-End to end against MongoDB and LocalStack S3 (needs Docker): `make e2e`.
+End to end against MongoDB and LocalStack S3 (needs Docker): `make e2e`. Isolated sidecar latency: `make bench-sidecar`. Requirement-by-requirement proof: [docs/05-requirements-traceability.md](docs/05-requirements-traceability.md).
 
 Other targets: `make build`, `make test`, `make vet`, `make ui`, `make gen`, `make check-names`, `make images` (`make help` lists all). In a network-restricted sandbox prefix them with `GEARBOX_RESTRICTED=1` (see [`scripts/dev/restricted-env.sh`](scripts/dev/restricted-env.sh)).
 

@@ -24,3 +24,4 @@ Also in this repository:
 | [`deploy/`](../deploy/) | Dockerfiles, docker compose, Helm charts |
 
 All examples use one domain: a **used-car lead service** (`app: lead_service`) that routes incoming leads to `fast_track`, `standard`, `reject` or `manual_review`.
+| [05-requirements-traceability.md](05-requirements-traceability.md) | Every requirement → where it is built → how it is proven |

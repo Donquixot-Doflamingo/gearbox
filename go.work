@@ -7,4 +7,5 @@ use (
 	./clients/go
 	./gen/go
 	./examples/go-service
+	./examples/probe
 )
