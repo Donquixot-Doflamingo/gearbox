@@ -1,0 +1,1 @@
+{"calls":693705,"client":"go","concurrency":8,"errors":0,"maxMicros":29179,"p50Micros":576,"p95Micros":1445,"p99Micros":2883,"perMinute":693369,"perSecond":11556,"seconds":60.029036001}

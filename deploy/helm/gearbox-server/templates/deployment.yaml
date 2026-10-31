@@ -1,0 +1,113 @@
+{{- $secret := include "gearbox-server.secretName" . }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "gearbox-server.fullname" . }}
+  labels:
+    {{- include "gearbox-server.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "gearbox-server.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "gearbox-server.selectorLabels" . | nindent 8 }}
+        {{- with .Values.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+        checksum/secret: {{ include (print $.Template.BasePath "/secret.yaml") . | sha256sum }}
+        {{- with .Values.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      serviceAccountName: {{ include "gearbox-server.serviceAccountName" . }}
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      containers:
+        - name: server
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          envFrom:
+            - configMapRef:
+                name: {{ include "gearbox-server.fullname" . }}
+          env:
+            {{- if include "gearbox-server.hasSecret" (dict "root" . "value" "mongoUri") }}
+            - name: GEARBOX_MONGO_URI
+              valueFrom: { secretKeyRef: { name: {{ $secret }}, key: mongo-uri, optional: true } }
+            {{- end }}
+            {{- if include "gearbox-server.hasSecret" (dict "root" . "value" "redisUrl") }}
+            - name: GEARBOX_REDIS_URL
+              valueFrom: { secretKeyRef: { name: {{ $secret }}, key: redis-url, optional: true } }
+            {{- end }}
+            {{- if include "gearbox-server.hasSecret" (dict "root" . "value" "awsAccessKeyId") }}
+            - name: AWS_ACCESS_KEY_ID
+              valueFrom: { secretKeyRef: { name: {{ $secret }}, key: aws-access-key-id, optional: true } }
+            - name: AWS_SECRET_ACCESS_KEY
+              valueFrom: { secretKeyRef: { name: {{ $secret }}, key: aws-secret-access-key, optional: true } }
+            {{- end }}
+            {{- if include "gearbox-server.hasSecret" (dict "root" . "value" "signingKey") }}
+            - name: GEARBOX_SIGNING_KEY_FILE
+              value: /etc/gearbox-secrets/signing.key
+            {{- end }}
+            {{- if include "gearbox-server.hasSecret" (dict "root" . "value" "hmacKey") }}
+            - name: GEARBOX_HMAC_KEY_FILE
+              value: /etc/gearbox-secrets/hmac.key
+            {{- end }}
+            {{- if include "gearbox-server.hasSecret" (dict "root" . "value" "sessionKey") }}
+            - name: GEARBOX_SESSION_KEY_FILE
+              value: /etc/gearbox-secrets/session.key
+            {{- end }}
+            {{- if include "gearbox-server.hasSecret" (dict "root" . "value" "oidcClientSecret") }}
+            - name: GEARBOX_OIDC_CLIENT_SECRET_FILE
+              value: /etc/gearbox-secrets/oidc-client-secret
+            {{- end }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.service.port }}
+            - name: metrics
+              containerPort: {{ .Values.service.metricsPort }}
+          readinessProbe:
+            httpGet: { path: /readyz, port: metrics }
+            periodSeconds: 5
+          livenessProbe:
+            httpGet: { path: /livez, port: metrics }
+            periodSeconds: 10
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          securityContext:
+            readOnlyRootFilesystem: true
+            allowPrivilegeEscalation: false
+            capabilities: { drop: [ALL] }
+          volumeMounts:
+            - name: secrets
+              mountPath: /etc/gearbox-secrets
+              readOnly: true
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: secrets
+          secret:
+            secretName: {{ $secret }}
+            optional: true
+        - name: tmp
+          emptyDir: {}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

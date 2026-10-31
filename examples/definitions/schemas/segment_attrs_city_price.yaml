@@ -1,0 +1,14 @@
+# Attributes a rule passes to the metro_premium dynamic segment.
+kind: schemas
+name: segment_attrs_city_price
+version: 1
+description: City and price attributes for dynamic segments
+spec:
+  jsonSchema:
+    type: object
+    required: [city, price]
+    properties:
+      city: { type: string }
+      price: { type: number, minimum: 0 }
+  examples:
+    - { city: Gurgaon, price: 950000 }

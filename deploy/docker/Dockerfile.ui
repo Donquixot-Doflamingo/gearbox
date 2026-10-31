@@ -1,0 +1,18 @@
+# syntax=docker/dockerfile:1.7
+# Optional: serve the admin UI from nginx instead of gearbox-server (GEARBOX_UI_DIR).
+# /api/ is proxied to GEARBOX_API_UPSTREAM (default http://gearbox-server:8080).
+#   docker build -f deploy/docker/Dockerfile.ui -t gearbox-ui:dev .
+ARG NODE_VERSION=22
+
+FROM node:${NODE_VERSION}-bookworm-slim AS ui
+WORKDIR /src/ui
+COPY ui/ ./
+RUN set -e; \
+    if [ -f package-lock.json ]; then npm ci; else npm install; fi; \
+    npm run build
+
+FROM nginxinc/nginx-unprivileged:1.27-alpine
+COPY --from=ui /src/ui/build /usr/share/nginx/html
+COPY deploy/docker/nginx-ui.conf.template /etc/nginx/templates/default.conf.template
+ENV GEARBOX_API_UPSTREAM=http://gearbox-server:8080
+EXPOSE 8080

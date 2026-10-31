@@ -1,0 +1,3 @@
+{"calls":5000,"maxMicros":4120,"p50Micros":254,"p95Micros":500,"p99Micros":708}
+{"calls":5000,"maxMicros":54560,"p50Micros":236,"p95Micros":430,"p99Micros":753}
+{"calls":5000,"maxMicros":4637,"p50Micros":212,"p95Micros":386,"p99Micros":577}

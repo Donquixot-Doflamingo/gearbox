@@ -1,0 +1,2181 @@
+openapi: 3.1.0
+info:
+  title: Gearbox Control Plane API
+  version: 1.0.0
+  summary: Author, version, review and publish decisions; register schemas and segments; operate sidecars.
+  description: |
+    Gearbox is a low-latency decision engine. Services ask a **sidecar** in their pod for decisions over gRPC
+    (see `proto/gearbox/v1/engine.proto`). This API is the **control plane**: where people and CI register
+    schemas, build decisions, review them and publish them. It is never on a service's request path.
+
+    ## Concepts
+
+    | Term | Meaning |
+    |---|---|
+    | **App** | A namespace and a bundle. Every service that uses the same decisions shares one app (and one app credential per environment). |
+    | **Environment** | `dev`, `stage`, `prod` (names configurable). Each has its own live versions, approval policy and bundle generation. |
+    | **Schema** | A registered JSON Schema (nested objects, arrays, nullable fields). **Every rule node and decision table needs a registered input schema and output schema before it can be saved.** |
+    | **Decision** | A small graph of nodes: `rules`, `table`, `transform`, `switch`, `lookup`, `gate`, `experiment`, `subdecision`, `ai`, `output`. A single rule set is a one-node decision. |
+    | **Segment** | A set of units used in rule conditions: `static` (uploaded member list), `dynamic` (membership computed from attributes with conditions) or `rollout` (a stable percentage of units). |
+    | **Lookup** | A key → value table shipped to sidecars. |
+    | **Gate / Experiment / Layer** | Feature flags, A/B experiments and mutual-exclusion layers. |
+    | **Draft / Version** | Every resource has one editable draft and immutable numbered versions (`v1`, `v2`…). Only versions can be released. |
+    | **Change request** | Asks to make versions live in one environment. Needs approval when the environment's policy says so. |
+    | **Release / Generation** | Publishing a change request (or a data update, rollout step, rollback, kill switch) produces a signed bundle with a new, ever-increasing generation number. |
+
+    ## Typical flow
+
+    1. `POST /apps/{app}/schemas` — register `lead_input` (and `routing_output`), then cut `v1` with `POST …/versions`.
+    2. `POST /apps/{app}/decisions` — create `lead_routing` with a `rules` node that points at `lead_input@1` and `routing_output@1`.
+    3. `POST /apps/{app}/decisions/lead_routing/evaluate` and `…/tests/run` — try it.
+    4. `POST /apps/{app}/decisions/lead_routing/versions` — cut `v1` (validation and tests must pass).
+    5. `POST /apps/{app}/change-requests` → `POST …/{id}/approve` → `POST /apps/{app}/environments/prod/releases`.
+    6. Every sidecar of the app in `prod` swaps to the new generation within seconds.
+
+    ## Data slots and code slots
+
+    Fields documented as **code** (`when`, `expr`, `from`, transform `fields[].expr`, switch `cases[].when`, segment
+    `key`/`attributes`) are always [Expr](https://expr-lang.org) expressions. Fields documented as **data** (rule `then`,
+    `default`, decision `fallback`, transform `defaults[].value`, experiment `parameters`, test `expect`) are literal
+    JSON; a string that starts with `=` is evaluated as an expression (`"=input.lead.id"`), and `"=="` escapes a literal `=`.
+
+    Inside a node, expressions see: `input` (the node's input, already validated against its input schema),
+    `request` (the original request input), `nodes.<id>` (outputs of nodes that already ran), `out` (transform only:
+    fields assigned so far) and `ctx` (`ctx.now`, `ctx.unit`, `ctx.requestId`, `ctx.env`).
+
+    ## Conventions
+
+    - **Auth.** People sign in with OIDC (`GET /auth/login`); the server sets an HTTP-only session cookie. CI and
+      scripts use a personal access token: `Authorization: Bearer gbx_pat_…`. Sidecar endpoints (`/sidecar/v1/*`) use an
+      app credential: `Authorization: Bearer gbx_cred_…`.
+    - **Errors** use `application/problem+json` ([RFC 9457](https://www.rfc-editor.org/rfc/rfc9457)) with a stable
+      `code` and, for validation, `errors[]` with a JSON pointer `path`. Branch on `code`, never on `detail`.
+    - **Optimistic concurrency.** Drafts carry a `revision`. Send it back on save; a stale revision returns `409 REVISION_CONFLICT`.
+    - **Pagination.** List endpoints take `cursor` and `limit` (default 50, max 200) and return `nextCursor` (absent on the last page).
+    - **Names** match `^[a-z][a-z0-9_]{1,62}$`. Versions are positive integers.
+    - **Times** are RFC 3339 UTC.
+  contact:
+    name: Gearbox maintainers
+  license:
+    name: MIT
+    identifier: MIT
+servers:
+  - url: http://localhost:8080/api/v1
+    description: Local development
+security:
+  - session: []
+  - bearerToken: []
+tags:
+  - name: Session
+    description: Sign-in, current user.
+  - name: Apps
+    description: Apps, environments and app credentials.
+  - name: Members
+    description: People and their roles.
+  - name: Resources
+    description: |
+      Generic draft/version operations shared by every versioned resource kind:
+      `schemas`, `decisions`, `segments`, `lookups`, `gates`, `experiments`, `layers`.
+  - name: Schemas
+    description: Schema registry operations beyond the generic ones.
+  - name: Decisions
+    description: Evaluate and test decisions.
+  - name: Segments
+    description: Segment members and membership checks.
+  - name: Lookups
+    description: Lookup table rows.
+  - name: Change requests
+    description: Review and approval.
+  - name: Releases
+    description: Publishing, rollouts, rollbacks, kill switches.
+  - name: Operations
+    description: Overview, sidecar fleet, logs, audit, AI shadow reports.
+  - name: Runtime
+    description: Remote Decision API for callers that cannot run a sidecar. Same engine, same answers, higher latency.
+  - name: Sidecar
+    description: Endpoints used only by sidecars (app credential auth).
+  - name: Meta
+    description: Catalogues the editors use for autocomplete and help.
+
+paths:
+  # ---------------------------------------------------------------- Session
+  /auth/login:
+    get:
+      tags: [Session]
+      operationId: login
+      summary: Start OIDC sign-in
+      description: Redirects to the configured OIDC provider. After sign-in the provider redirects to `/auth/callback`, which sets the session cookie and redirects to `returnTo`.
+      security: []
+      parameters:
+        - name: returnTo
+          in: query
+          schema: { type: string, default: / }
+      responses:
+        '302': { description: Redirect to the identity provider. }
+  /auth/logout:
+    post:
+      tags: [Session]
+      operationId: logout
+      summary: End the session
+      responses:
+        '204': { description: Signed out; the cookie is cleared. }
+  /session:
+    get:
+      tags: [Session]
+      operationId: getSession
+      summary: Current user and roles
+      responses:
+        '200':
+          description: Signed-in user.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Session' }
+              examples:
+                author:
+                  value: { member: { id: mem_01, email: asha@example.com, name: Asha Verma, role: author, apps: [] }, csrfToken: c1f0… }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  # ---------------------------------------------------------------- Apps
+  /apps:
+    get:
+      tags: [Apps]
+      operationId: listApps
+      summary: List apps
+      parameters: [ { $ref: '#/components/parameters/Cursor' }, { $ref: '#/components/parameters/Limit' } ]
+      responses:
+        '200':
+          description: Apps the caller can see.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items: { type: array, items: { $ref: '#/components/schemas/App' } }
+                  nextCursor: { type: string }
+    post:
+      tags: [Apps]
+      operationId: createApp
+      summary: Create an app
+      description: Creates the app with environments `dev`, `stage` and `prod` and default approval policies. Admin only.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AppCreate' }
+            examples:
+              leadService: { value: { name: lead_service, description: Lead routing and pricing decisions, owners: [team-leads] } }
+      responses:
+        '201': { description: Created., content: { application/json: { schema: { $ref: '#/components/schemas/App' } } } }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/Unprocessable' }
+  /apps/{app}:
+    parameters: [ { $ref: '#/components/parameters/App' } ]
+    get:
+      tags: [Apps]
+      operationId: getApp
+      summary: Get an app
+      responses:
+        '200': { description: The app., content: { application/json: { schema: { $ref: '#/components/schemas/App' } } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+    patch:
+      tags: [Apps]
+      operationId: updateApp
+      summary: Update app settings
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/AppUpdate' } } }
+      responses:
+        '200': { description: Updated., content: { application/json: { schema: { $ref: '#/components/schemas/App' } } } }
+  /apps/{app}/environments:
+    parameters: [ { $ref: '#/components/parameters/App' } ]
+    get:
+      tags: [Apps]
+      operationId: listEnvironments
+      summary: List environments with their state
+      responses:
+        '200':
+          description: Environments of the app.
+          content:
+            application/json:
+              schema: { type: object, required: [items], properties: { items: { type: array, items: { $ref: '#/components/schemas/Environment' } } } }
+  /apps/{app}/environments/{env}:
+    parameters: [ { $ref: '#/components/parameters/App' }, { $ref: '#/components/parameters/Env' } ]
+    patch:
+      tags: [Apps]
+      operationId: updateEnvironment
+      summary: Change an environment's policy
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/EnvironmentPolicy' } } }
+      responses:
+        '200': { description: Updated., content: { application/json: { schema: { $ref: '#/components/schemas/Environment' } } } }
+  /apps/{app}/environments/{env}/credentials:
+    parameters: [ { $ref: '#/components/parameters/App' }, { $ref: '#/components/parameters/Env' } ]
+    get:
+      tags: [Apps]
+      operationId: listCredentials
+      summary: List sidecar credentials
+      responses:
+        '200':
+          description: Credentials (secrets are never returned after creation).
+          content:
+            application/json:
+              schema: { type: object, required: [items], properties: { items: { type: array, items: { $ref: '#/components/schemas/Credential' } } } }
+    post:
+      tags: [Apps]
+      operationId: createCredential
+      summary: Create a sidecar credential
+      description: Returns the secret **once**. Store it as a Kubernetes secret and mount it into the sidecar (`GEARBOX_CREDENTIAL_FILE`).
+      requestBody:
+        content: { application/json: { schema: { type: object, properties: { label: { type: string, maxLength: 100 } } } } }
+      responses:
+        '201':
+          description: Created.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CredentialCreated' }
+              examples:
+                created: { value: { credential: { id: cred_7Hq2, environment: prod, label: k8s prod, state: active, createdAt: '2026-10-31T09:00:00Z', createdBy: meera@example.com }, secret: gbx_cred_prod_7Hq2_Xk1… } }
+  /apps/{app}/environments/{env}/credentials/{credentialId}/revoke:
+    parameters: [ { $ref: '#/components/parameters/App' }, { $ref: '#/components/parameters/Env' }, { name: credentialId, in: path, required: true, schema: { type: string } } ]
+    post:
+      tags: [Apps]
+      operationId: revokeCredential
+      summary: Revoke a sidecar credential
+      description: Sidecars using it keep serving their current bundle but can no longer fetch updates.
+      responses:
+        '200': { description: Revoked., content: { application/json: { schema: { $ref: '#/components/schemas/Credential' } } } }
+
+  # ---------------------------------------------------------------- Members
+  /members:
+    get:
+      tags: [Members]
+      operationId: listMembers
+      summary: List members
+      responses:
+        '200':
+          description: Members.
+          content: { application/json: { schema: { type: object, required: [items], properties: { items: { type: array, items: { $ref: '#/components/schemas/Member' } } } } } }
+    post:
+      tags: [Members]
+      operationId: addMember
+      summary: Add a member
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/MemberInput' } } }
+      responses:
+        '201': { description: Added., content: { application/json: { schema: { $ref: '#/components/schemas/Member' } } } }
+  /members/{memberId}:
+    parameters: [ { name: memberId, in: path, required: true, schema: { type: string } } ]
+    patch:
+      tags: [Members]
+      operationId: updateMember
+      summary: Change a member's role
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/MemberInput' } } }
+      responses:
+        '200': { description: Updated., content: { application/json: { schema: { $ref: '#/components/schemas/Member' } } } }
+    delete:
+      tags: [Members]
+      operationId: removeMember
+      summary: Remove a member
+      responses:
+        '204': { description: Removed. }
+  /tokens:
+    post:
+      tags: [Members]
+      operationId: createToken
+      summary: Create a personal access token for CLI and CI
+      requestBody:
+        required: true
+        content: { application/json: { schema: { type: object, required: [label], properties: { label: { type: string }, expiresInDays: { type: integer, minimum: 1, maximum: 365, default: 90 } } } } }
+      responses:
+        '201':
+          description: Token (shown once).
+          content: { application/json: { schema: { type: object, required: [id, token, expiresAt], properties: { id: { type: string }, token: { type: string }, expiresAt: { type: string, format: date-time } } } } }
+
+  # ---------------------------------------------------------------- Generic resources
+  /apps/{app}/{kind}:
+    parameters: [ { $ref: '#/components/parameters/App' }, { $ref: '#/components/parameters/Kind' } ]
+    get:
+      tags: [Resources]
+      operationId: listResources
+      summary: List resources of one kind
+      parameters:
+        - { $ref: '#/components/parameters/Cursor' }
+        - { $ref: '#/components/parameters/Limit' }
+        - name: q
+          in: query
+          description: Filter by name or description (substring, case-insensitive).
+          schema: { type: string }
+      responses:
+        '200':
+          description: Resources with their live versions per environment.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items: { type: array, items: { $ref: '#/components/schemas/ResourceSummary' } }
+                  nextCursor: { type: string }
+    post:
+      tags: [Resources]
+      operationId: createResource
+      summary: Create a resource (as a draft)
+      description: |
+        Creates the resource with a draft at revision 1. The spec is validated on save.
+
+        **Schema rule:** a decision whose `rules` or `table` node has no `inputSchema`/`outputSchema`, or points at a schema
+        version that is not registered, is rejected with `422 SCHEMA_REQUIRED` or `422 SCHEMA_NOT_FOUND`. Register the
+        schema first (`POST /apps/{app}/schemas`, then cut a version).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ResourceCreate' }
+            examples:
+              schema: { $ref: '#/components/examples/CreateLeadInputSchema' }
+              decision: { $ref: '#/components/examples/CreateLeadRoutingDecision' }
+              staticSegment:
+                summary: A static segment
+                value: { name: vip_dealers, description: Dealers with a VIP contract, spec: { type: static, static: { keyType: string } } }
+              dynamicSegment:
+                summary: A dynamic segment
+                value:
+                  name: metro_premium
+                  description: Leads in a metro city for cars above 8 lakh
+                  spec:
+                    type: dynamic
+                    dynamic:
+                      attributesSchema: { name: segment_attrs_city_price, version: 1 }
+                      when: { all: [ { field: city, op: IN, value: [Delhi, Gurgaon, Mumbai, Bengaluru] }, { field: price, op: GT, value: 800000 } ] }
+      responses:
+        '201': { description: Created., content: { application/json: { schema: { $ref: '#/components/schemas/Resource' } } } }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/Unprocessable' }
+  /apps/{app}/{kind}/{name}:
+    parameters: [ { $ref: '#/components/parameters/App' }, { $ref: '#/components/parameters/Kind' }, { $ref: '#/components/parameters/Name' } ]
+    get:
+      tags: [Resources]
+      operationId: getResource
+      summary: Get a resource with its draft and live versions
+      responses:
+        '200': { description: The resource., content: { application/json: { schema: { $ref: '#/components/schemas/Resource' } } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+    delete:
+      tags: [Resources]
+      operationId: archiveResource
+      summary: Archive a resource
+      description: Allowed only when no environment runs it and no other resource uses it (`409 IN_USE` otherwise).
+      responses:
+        '204': { description: Archived. }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /apps/{app}/{kind}/{name}/draft:
+    parameters: [ { $ref: '#/components/parameters/App' }, { $ref: '#/components/parameters/Kind' }, { $ref: '#/components/parameters/Name' } ]
+    put:
+      tags: [Resources]
+      operationId: saveDraft
+      summary: Save the draft
+      description: Replaces the draft spec. Send the `revision` you loaded; a newer revision on the server returns `409 REVISION_CONFLICT`. The same schema rule as on create applies.
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/DraftSave' } } }
+      responses:
+        '200': { description: Saved., content: { application/json: { schema: { $ref: '#/components/schemas/Resource' } } } }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/Unprocessable' }
+  /apps/{app}/{kind}/{name}/validate:
+    parameters: [ { $ref: '#/components/parameters/App' }, { $ref: '#/components/parameters/Kind' }, { $ref: '#/components/parameters/Name' } ]
+    post:
+      tags: [Resources]
+      operationId: validateResource
+      summary: Validate the draft (or a given spec) without saving
+      description: Compiles every expression, type-checks against the registered schemas, checks graph shape (cycles, unreachable nodes, references to nodes that may not have run), cost limits and PII rules. Use it for live feedback in editors.
+      requestBody:
+        content: { application/json: { schema: { type: object, properties: { spec: { $ref: '#/components/schemas/ResourceSpec' } } } } }
+      responses:
+        '200':
+          description: Validation result (always 200; check `valid`).
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ValidationResult' }
+              examples:
+                typeError:
+                  value: { valid: false, problems: [ { code: TYPE_MISMATCH, severity: error, path: /nodes/1/rules/0/when/all/0, message: 'car.km is integer in lead_input@1; cannot compare with string "60000"' } ] }
+  /apps/{app}/{kind}/{name}/versions:
+    parameters: [ { $ref: '#/components/parameters/App' }, { $ref: '#/components/parameters/Kind' }, { $ref: '#/components/parameters/Name' } ]
+    get:
+      tags: [Resources]
+      operationId: listVersions
+      summary: List versions
+      parameters: [ { $ref: '#/components/parameters/Cursor' }, { $ref: '#/components/parameters/Limit' } ]
+      responses:
+        '200':
+          description: Versions, newest first.
+          content: { application/json: { schema: { type: object, required: [items], properties: { items: { type: array, items: { $ref: '#/components/schemas/VersionInfo' } }, nextCursor: { type: string } } } } }
+    post:
+      tags: [Resources]
+      operationId: cutVersion
+      summary: Cut an immutable version from the draft
+      description: The draft must validate and, for decisions, every test case must pass. For schemas, a new version must be backward compatible with the previous one unless `allowBreaking` is true (then decisions that use the old version keep using it until they are updated).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [revision]
+              properties:
+                revision: { type: integer, description: Draft revision the version is cut from. }
+                message: { type: string, maxLength: 500, description: What changed. }
+                allowBreaking: { type: boolean, default: false, description: Schemas only. }
+            examples:
+              cut: { value: { revision: 7, message: Widen band A to 8.5 lakh } }
+      responses:
+        '201': { description: Version created., content: { application/json: { schema: { $ref: '#/components/schemas/VersionInfo' } } } }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/Unprocessable' }
+  /apps/{app}/{kind}/{name}/versions/{version}:
+    parameters: [ { $ref: '#/components/parameters/App' }, { $ref: '#/components/parameters/Kind' }, { $ref: '#/components/parameters/Name' }, { $ref: '#/components/parameters/Version' } ]
+    get:
+      tags: [Resources]
+      operationId: getVersion
+      summary: Get one version's spec
+      responses:
+        '200': { description: The version., content: { application/json: { schema: { $ref: '#/components/schemas/ResourceVersion' } } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /apps/{app}/{kind}/{name}/diff:
+    parameters: [ { $ref: '#/components/parameters/App' }, { $ref: '#/components/parameters/Kind' }, { $ref: '#/components/parameters/Name' } ]
+    get:
+      tags: [Resources]
+      operationId: diffVersions
+      summary: Diff two versions (or a version and the draft)
+      parameters:
+        - { name: from, in: query, required: true, schema: { type: string, description: 'Version number or "draft"' } }
+        - { name: to, in: query, required: true, schema: { type: string, description: 'Version number or "draft"' } }
+      responses:
+        '200':
+          description: Unified YAML diff plus structured changes.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [unified, changes]
+                properties:
+                  unified: { type: string, description: Unified diff of the YAML form. }
+                  changes: { type: array, items: { type: object, required: [op, path], properties: { op: { enum: [add, remove, replace] }, path: { type: string }, from: {}, to: {} } } }
+  /apps/{app}/{kind}/{name}/usages:
+    parameters: [ { $ref: '#/components/parameters/App' }, { $ref: '#/components/parameters/Kind' }, { $ref: '#/components/parameters/Name' } ]
+    get:
+      tags: [Resources]
+      operationId: listUsages
+      summary: Which resources use this one
+      description: For a schema, the decisions, segments and lookups that reference each of its versions. For a segment, gate, lookup or experiment, the decisions that read it.
+      responses:
+        '200':
+          description: Usages.
+          content: { application/json: { schema: { type: object, required: [items], properties: { items: { type: array, items: { $ref: '#/components/schemas/Usage' } } } } } }
+
+  # ---------------------------------------------------------------- Schemas
+  /apps/{app}/schemas/{name}/versions/{version}/validate-document:
+    parameters: [ { $ref: '#/components/parameters/App' }, { $ref: '#/components/parameters/Name' }, { $ref: '#/components/parameters/Version' } ]
+    post:
+      tags: [Schemas]
+      operationId: validateDocument
+      summary: Check a JSON document against a schema version
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, required: [document], properties: { document: {} } }
+            examples:
+              missingField: { value: { document: { lead: { id: L-1, city: Pune }, car: { make: Maruti, year: 2019 } } } }
+      responses:
+        '200':
+          description: Result.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DocumentValidation' }
+              examples:
+                invalid: { value: { valid: false, errors: [ { path: /car/price, message: required property missing } ] } }
+  /apps/{app}/schemas/{name}/compatibility:
+    parameters: [ { $ref: '#/components/parameters/App' }, { $ref: '#/components/parameters/Name' } ]
+    post:
+      tags: [Schemas]
+      operationId: checkSchemaCompatibility
+      summary: Would this spec be a compatible next version?
+      description: Compares a proposed spec with the latest version. Breaking changes are removing a property, making a property required, narrowing a type or enum, or removing `null` from a type.
+      requestBody:
+        required: true
+        content: { application/json: { schema: { type: object, required: [spec], properties: { spec: { $ref: '#/components/schemas/SchemaSpec' } } } } }
+      responses:
+        '200':
+          description: Result.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [compatible, changes]
+                properties:
+                  compatible: { type: boolean }
+                  changes: { type: array, items: { type: object, required: [path, kind, breaking], properties: { path: { type: string }, kind: { type: string, examples: [property_removed, became_required, type_narrowed, property_added] }, breaking: { type: boolean } } } }
+
+  # ---------------------------------------------------------------- Decisions
+  /apps/{app}/decisions/{name}/evaluate:
+    parameters: [ { $ref: '#/components/parameters/App' }, { $ref: '#/components/parameters/Name' } ]
+    post:
+      tags: [Decisions]
+      operationId: evaluateDecision
+      summary: Run a decision in the test console
+      description: Evaluates the draft or a version with the same engine the sidecars use, against the live versions of segments, lookups, gates and experiments in `environment`. Returns every node's input and output so editors can show them.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/EvaluateRequest' }
+            examples:
+              draft: { value: { source: draft, environment: dev, input: { lead: { id: L-1029384, city: Gurgaon, source: app, phone: '+91-9876543210' }, car: { make: Maruti, model: Swift VXI, year: 2019, km: 48200, price: 525000 }, inspections: [ { part: engine, score: 8 }, { part: body, score: 5 } ] }, ctx: { now: '2026-10-30T10:00:00Z', unit: L-1029384 } } }
+      responses:
+        '200':
+          description: Result (also returned when the decision used its fallback).
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EvaluateResult' }
+              examples:
+                fastTrack: { $ref: '#/components/examples/EvaluateFastTrack' }
+        '422': { $ref: '#/components/responses/Unprocessable' }
+  /apps/{app}/decisions/{name}/tests/run:
+    parameters: [ { $ref: '#/components/parameters/App' }, { $ref: '#/components/parameters/Name' } ]
+    post:
+      tags: [Decisions]
+      operationId: runDecisionTests
+      summary: Run the decision's test cases
+      requestBody:
+        content: { application/json: { schema: { type: object, properties: { source: { $ref: '#/components/schemas/Source' }, version: { type: integer }, environment: { type: string, default: dev } } } } }
+      responses:
+        '200': { description: Results., content: { application/json: { schema: { $ref: '#/components/schemas/TestRunResult' } } } }
+  /apps/{app}/decisions/{name}/nodes/{nodeId}/shadow-report:
+    parameters: [ { $ref: '#/components/parameters/App' }, { $ref: '#/components/parameters/Name' }, { name: nodeId, in: path, required: true, schema: { type: string } } ]
+    get:
+      tags: [Operations]
+      operationId: getShadowReport
+      summary: Compare an AI node in shadow mode with the path that decided
+      parameters:
+        - { name: environment, in: query, schema: { type: string, default: prod } }
+        - { name: version, in: query, schema: { type: integer } }
+        - { name: days, in: query, schema: { type: integer, default: 7, minimum: 1, maximum: 90 } }
+      responses:
+        '200': { description: Report., content: { application/json: { schema: { $ref: '#/components/schemas/ShadowReport' } } } }
+
+  # ---------------------------------------------------------------- Segments
+  /apps/{app}/segments/{name}/members:
+    parameters: [ { $ref: '#/components/parameters/App' }, { $ref: '#/components/parameters/Name' } ]
+    get:
+      tags: [Segments]
+      operationId: listSegmentMembers
+      summary: Page through a static segment's draft members
+      parameters: [ { $ref: '#/components/parameters/Cursor' }, { $ref: '#/components/parameters/Limit' }, { name: prefix, in: query, schema: { type: string } } ]
+      responses:
+        '200': { description: Members., content: { application/json: { schema: { type: object, required: [items, total], properties: { items: { type: array, items: { type: string } }, total: { type: integer }, nextCursor: { type: string } } } } } }
+    put:
+      tags: [Segments]
+      operationId: replaceSegmentMembers
+      summary: Replace a static segment's draft members
+      description: Upload CSV (one member per line, optional header `key`) or JSON. Members of a segment marked `pii` are stored as HMACs. Cut a version afterwards to release them. Up to 1,000,000 members.
+      requestBody:
+        required: true
+        content:
+          text/csv: { schema: { type: string } }
+          application/json: { schema: { type: object, required: [members], properties: { members: { type: array, items: { type: string }, maxItems: 1000000 } } } }
+      responses:
+        '200': { description: Stored., content: { application/json: { schema: { type: object, required: [total, revision], properties: { total: { type: integer }, revision: { type: integer } } } } } }
+        '422': { $ref: '#/components/responses/Unprocessable' }
+  /apps/{app}/segments/{name}/check:
+    parameters: [ { $ref: '#/components/parameters/App' }, { $ref: '#/components/parameters/Name' } ]
+    post:
+      tags: [Segments]
+      operationId: checkSegmentMembership
+      summary: Is this unit in the segment?
+      description: |
+        - `static`: send `key`.
+        - `dynamic`: send `attributes` matching the segment's `attributesSchema`.
+        - `rollout`: send `unit`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/SegmentCheckRequest' }
+            examples:
+              dynamic: { value: { source: draft, attributes: { city: Gurgaon, price: 950000 } } }
+      responses:
+        '200':
+          description: Result.
+          content:
+            application/json:
+              schema: { type: object, required: [member], properties: { member: { type: boolean }, reason: { type: string, examples: [listed, not_listed, conditions_matched, conditions_failed, 'bucket 731 < 1000'] } } }
+
+  # ---------------------------------------------------------------- Lookups
+  /apps/{app}/lookups/{name}/rows:
+    parameters: [ { $ref: '#/components/parameters/App' }, { $ref: '#/components/parameters/Name' } ]
+    get:
+      tags: [Lookups]
+      operationId: listLookupRows
+      summary: Read draft rows (or one key)
+      parameters: [ { name: key, in: query, schema: { type: string } }, { $ref: '#/components/parameters/Cursor' }, { $ref: '#/components/parameters/Limit' } ]
+      responses:
+        '200': { description: Rows., content: { application/json: { schema: { type: object, required: [items, total], properties: { items: { type: array, items: { $ref: '#/components/schemas/LookupRow' } }, total: { type: integer }, nextCursor: { type: string } } } } } }
+    put:
+      tags: [Lookups]
+      operationId: replaceLookupRows
+      summary: Replace draft rows
+      description: CSV with columns `key,value` (value is JSON or a plain string) or JSON. Every value must match the lookup's `valueSchema`.
+      requestBody:
+        required: true
+        content:
+          text/csv: { schema: { type: string } }
+          application/json: { schema: { type: object, required: [rows], properties: { rows: { type: array, items: { $ref: '#/components/schemas/LookupRow' } } } } }
+      responses:
+        '200': { description: Stored., content: { application/json: { schema: { type: object, required: [total, revision], properties: { total: { type: integer }, revision: { type: integer } } } } } }
+        '422': { $ref: '#/components/responses/Unprocessable' }
+
+  # ---------------------------------------------------------------- Change requests
+  /apps/{app}/change-requests:
+    parameters: [ { $ref: '#/components/parameters/App' } ]
+    get:
+      tags: [Change requests]
+      operationId: listChangeRequests
+      summary: List change requests
+      parameters:
+        - { name: status, in: query, schema: { $ref: '#/components/schemas/ChangeRequestStatus' } }
+        - { name: environment, in: query, schema: { type: string } }
+        - { $ref: '#/components/parameters/Cursor' }
+        - { $ref: '#/components/parameters/Limit' }
+      responses:
+        '200': { description: Change requests., content: { application/json: { schema: { type: object, required: [items], properties: { items: { type: array, items: { $ref: '#/components/schemas/ChangeRequest' } }, nextCursor: { type: string } } } } } }
+    post:
+      tags: [Change requests]
+      operationId: createChangeRequest
+      summary: Ask to make versions live in an environment
+      description: Validates the whole would-be bundle (every decision compiles against the versions it would run with, every test passes, cost and size limits hold) before the request is opened.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ChangeRequestCreate' }
+            examples:
+              prod:
+                value:
+                  environment: prod
+                  title: Widen band A and shorten AI timeout
+                  description: Band A now goes up to 8.5 lakh. AI node stays in shadow.
+                  items:
+                    - { kind: decisions, name: lead_routing, version: 18, rollout: { percent: 5 } }
+                    - { kind: schemas, name: lead_input, version: 2 }
+      responses:
+        '201': { description: Opened., content: { application/json: { schema: { $ref: '#/components/schemas/ChangeRequest' } } } }
+        '422': { $ref: '#/components/responses/Unprocessable' }
+  /apps/{app}/change-requests/{id}:
+    parameters: [ { $ref: '#/components/parameters/App' }, { $ref: '#/components/parameters/ChangeRequestId' } ]
+    get:
+      tags: [Change requests]
+      operationId: getChangeRequest
+      summary: Get a change request with diffs and test results
+      responses:
+        '200': { description: The change request., content: { application/json: { schema: { $ref: '#/components/schemas/ChangeRequest' } } } }
+  /apps/{app}/change-requests/{id}/approve:
+    parameters: [ { $ref: '#/components/parameters/App' }, { $ref: '#/components/parameters/ChangeRequestId' } ]
+    post:
+      tags: [Change requests]
+      operationId: approveChangeRequest
+      summary: Approve
+      description: '`403 SELF_APPROVAL` when the environment forbids authors approving their own requests.'
+      requestBody: { content: { application/json: { schema: { type: object, properties: { comment: { type: string } } } } } }
+      responses:
+        '200': { description: Approved (or still waiting for more approvals)., content: { application/json: { schema: { $ref: '#/components/schemas/ChangeRequest' } } } }
+        '403': { $ref: '#/components/responses/Forbidden' }
+  /apps/{app}/change-requests/{id}/reject:
+    parameters: [ { $ref: '#/components/parameters/App' }, { $ref: '#/components/parameters/ChangeRequestId' } ]
+    post:
+      tags: [Change requests]
+      operationId: rejectChangeRequest
+      summary: Request changes
+      requestBody: { required: true, content: { application/json: { schema: { type: object, required: [comment], properties: { comment: { type: string } } } } } }
+      responses:
+        '200': { description: Rejected., content: { application/json: { schema: { $ref: '#/components/schemas/ChangeRequest' } } } }
+  /apps/{app}/change-requests/{id}/comments:
+    parameters: [ { $ref: '#/components/parameters/App' }, { $ref: '#/components/parameters/ChangeRequestId' } ]
+    post:
+      tags: [Change requests]
+      operationId: commentChangeRequest
+      summary: Comment
+      requestBody: { required: true, content: { application/json: { schema: { type: object, required: [body], properties: { body: { type: string, maxLength: 5000 } } } } } }
+      responses:
+        '200': { description: Comment added., content: { application/json: { schema: { $ref: '#/components/schemas/ChangeRequest' } } } }
+  /apps/{app}/change-requests/{id}/withdraw:
+    parameters: [ { $ref: '#/components/parameters/App' }, { $ref: '#/components/parameters/ChangeRequestId' } ]
+    post:
+      tags: [Change requests]
+      operationId: withdrawChangeRequest
+      summary: Withdraw (author only)
+      responses:
+        '200': { description: Withdrawn., content: { application/json: { schema: { $ref: '#/components/schemas/ChangeRequest' } } } }
+
+  # ---------------------------------------------------------------- Releases
+  /apps/{app}/environments/{env}/releases:
+    parameters: [ { $ref: '#/components/parameters/App' }, { $ref: '#/components/parameters/Env' } ]
+    get:
+      tags: [Releases]
+      operationId: listReleases
+      summary: Release history (newest first)
+      parameters: [ { $ref: '#/components/parameters/Cursor' }, { $ref: '#/components/parameters/Limit' } ]
+      responses:
+        '200': { description: Releases., content: { application/json: { schema: { type: object, required: [items], properties: { items: { type: array, items: { $ref: '#/components/schemas/Release' } }, nextCursor: { type: string } } } } } }
+    post:
+      tags: [Releases]
+      operationId: publishRelease
+      summary: Publish a new generation
+      description: |
+        One endpoint for every way a bundle changes. Each call builds the full bundle for the app and environment, re-runs
+        every test, signs it, uploads it to the object store and notifies sidecars.
+
+        | `type` | Needs |
+        |---|---|
+        | `change_request` | an approved change request |
+        | `data` | segment or lookup versions; allowed without review when the environment has `allowDataReleases` and every dependent test passes |
+        | `rollout` | a decision currently rolling out; sets the new percentage |
+        | `rollback` | an earlier generation to return to (approver role; recorded as break-glass when no change request) |
+        | `kill_switch` | a gate to force off (or back on) immediately |
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ReleaseCreate' }
+            examples:
+              changeRequest: { value: { type: change_request, changeRequestId: cr_214 } }
+              rolloutStep: { value: { type: rollout, decision: lead_routing, percent: 50 } }
+              rollback: { value: { type: rollback, toGeneration: 41, reason: v17 misroutes Pune leads } }
+              kill: { value: { type: kill_switch, gate: dealer_auction_v2, killed: true, reason: auction service down } }
+              data: { value: { type: data, items: [ { kind: segments, name: vip_dealers, version: 32 } ] } }
+      responses:
+        '201':
+          description: Published.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Release' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/Unprocessable' }
+  /apps/{app}/environments/{env}/releases/{generation}:
+    parameters: [ { $ref: '#/components/parameters/App' }, { $ref: '#/components/parameters/Env' }, { name: generation, in: path, required: true, schema: { type: integer } } ]
+    get:
+      tags: [Releases]
+      operationId: getRelease
+      summary: Get one release with its manifest
+      responses:
+        '200': { description: Release., content: { application/json: { schema: { $ref: '#/components/schemas/Release' } } } }
+
+  # ---------------------------------------------------------------- Operations
+  /apps/{app}/environments/{env}/overview:
+    parameters: [ { $ref: '#/components/parameters/App' }, { $ref: '#/components/parameters/Env' } ]
+    get:
+      tags: [Operations]
+      operationId: getOverview
+      summary: Health figures for the overview screen
+      responses:
+        '200': { description: Overview., content: { application/json: { schema: { $ref: '#/components/schemas/Overview' } } } }
+  /apps/{app}/environments/{env}/sidecars:
+    parameters: [ { $ref: '#/components/parameters/App' }, { $ref: '#/components/parameters/Env' } ]
+    get:
+      tags: [Operations]
+      operationId: listSidecars
+      summary: Sidecar fleet (lagging sidecars first)
+      parameters: [ { $ref: '#/components/parameters/Cursor' }, { $ref: '#/components/parameters/Limit' } ]
+      responses:
+        '200': { description: Sidecars seen in the last 10 minutes., content: { application/json: { schema: { type: object, required: [items, summary], properties: { summary: { $ref: '#/components/schemas/FleetSummary' }, items: { type: array, items: { $ref: '#/components/schemas/Sidecar' } }, nextCursor: { type: string } } } } } }
+  /apps/{app}/environments/{env}/decision-logs:
+    parameters: [ { $ref: '#/components/parameters/App' }, { $ref: '#/components/parameters/Env' } ]
+    get:
+      tags: [Operations]
+      operationId: searchDecisionLogs
+      summary: Search sampled decision records
+      parameters:
+        - { name: decision, in: query, schema: { type: string } }
+        - { name: version, in: query, schema: { type: integer } }
+        - { name: requestId, in: query, schema: { type: string } }
+        - { name: unitId, in: query, schema: { type: string } }
+        - { name: fallback, in: query, schema: { type: boolean } }
+        - { name: from, in: query, schema: { type: string, format: date-time } }
+        - { name: to, in: query, schema: { type: string, format: date-time } }
+        - { $ref: '#/components/parameters/Cursor' }
+        - { $ref: '#/components/parameters/Limit' }
+      responses:
+        '200': { description: Records, newest first., content: { application/json: { schema: { type: object, required: [items], properties: { items: { type: array, items: { $ref: '#/components/schemas/DecisionLogRecord' } }, nextCursor: { type: string } } } } } }
+  /apps/{app}/environments/{env}/update-logs:
+    parameters: [ { $ref: '#/components/parameters/App' }, { $ref: '#/components/parameters/Env' } ]
+    get:
+      tags: [Operations]
+      operationId: listUpdateLogs
+      summary: Sidecar update records (swaps and failures)
+      parameters: [ { name: result, in: query, schema: { $ref: '#/components/schemas/UpdateResult' } }, { $ref: '#/components/parameters/Cursor' }, { $ref: '#/components/parameters/Limit' } ]
+      responses:
+        '200': { description: Records., content: { application/json: { schema: { type: object, required: [items], properties: { items: { type: array, items: { $ref: '#/components/schemas/UpdateLogRecord' } }, nextCursor: { type: string } } } } } }
+  /apps/{app}/environments/{env}/exposure-logs:
+    parameters: [ { $ref: '#/components/parameters/App' }, { $ref: '#/components/parameters/Env' } ]
+    get:
+      tags: [Operations]
+      operationId: listExposureLogs
+      summary: Experiment exposure records (never sampled)
+      parameters: [ { name: experiment, in: query, schema: { type: string } }, { name: unitId, in: query, schema: { type: string } }, { $ref: '#/components/parameters/Cursor' }, { $ref: '#/components/parameters/Limit' } ]
+      responses:
+        '200': { description: Records., content: { application/json: { schema: { type: object, required: [items], properties: { items: { type: array, items: { $ref: '#/components/schemas/ExposureRecord' } }, nextCursor: { type: string } } } } } }
+  /audit:
+    get:
+      tags: [Operations]
+      operationId: listAudit
+      summary: Audit trail (append-only)
+      parameters: [ { name: app, in: query, schema: { type: string } }, { name: actor, in: query, schema: { type: string } }, { $ref: '#/components/parameters/Cursor' }, { $ref: '#/components/parameters/Limit' } ]
+      responses:
+        '200': { description: Events, newest first., content: { application/json: { schema: { type: object, required: [items], properties: { items: { type: array, items: { $ref: '#/components/schemas/AuditEvent' } }, nextCursor: { type: string } } } } } }
+  /webhooks:
+    get:
+      tags: [Operations]
+      operationId: listWebhooks
+      summary: List webhooks
+      responses:
+        '200': { description: Webhooks., content: { application/json: { schema: { type: object, required: [items], properties: { items: { type: array, items: { $ref: '#/components/schemas/Webhook' } } } } } } }
+    post:
+      tags: [Operations]
+      operationId: createWebhook
+      summary: Add a webhook
+      description: 'Gearbox POSTs JSON events signed with `X-Gearbox-Signature: sha256=<hmac>` and retries with backoff for 24 h.'
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/WebhookInput' } } } }
+      responses:
+        '201': { description: Added (secret returned once)., content: { application/json: { schema: { allOf: [ { $ref: '#/components/schemas/Webhook' }, { type: object, properties: { secret: { type: string } } } ] } } } }
+  /webhooks/{webhookId}:
+    parameters: [ { name: webhookId, in: path, required: true, schema: { type: string } } ]
+    delete:
+      tags: [Operations]
+      operationId: deleteWebhook
+      summary: Remove a webhook
+      responses:
+        '204': { description: Removed. }
+
+  # ---------------------------------------------------------------- Runtime
+  /apps/{app}/environments/{env}/decide:
+    parameters: [ { $ref: '#/components/parameters/App' }, { $ref: '#/components/parameters/Env' } ]
+    post:
+      tags: [Runtime]
+      operationId: decide
+      summary: Remote Decision API
+      description: Same request and response as the sidecar's `Decide` RPC, as JSON. Accepts an app credential or a user token. Expect a network round trip; prefer the sidecar for hot paths.
+      security: [ { appCredential: [] }, { bearerToken: [] } ]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/DecideRequest' }
+            examples:
+              lead: { value: { decision: lead_routing, unitId: L-1029384, requestId: req_8c1f2a, input: { lead: { id: L-1029384, city: Gurgaon, source: app, phone: '+91-9876543210' }, car: { make: Maruti, model: Swift VXI, year: 2019, km: 48200, price: 525000 }, inspections: [ { part: engine, score: 8 }, { part: body, score: 5 } ] } } }
+      responses:
+        '200': { description: Decision., content: { application/json: { schema: { $ref: '#/components/schemas/DecideResult' } } } }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /apps/{app}/environments/{env}/gates/{name}/check:
+    parameters: [ { $ref: '#/components/parameters/App' }, { $ref: '#/components/parameters/Env' }, { $ref: '#/components/parameters/Name' } ]
+    post:
+      tags: [Runtime]
+      operationId: checkGate
+      summary: Evaluate a gate remotely
+      security: [ { appCredential: [] }, { bearerToken: [] } ]
+      requestBody: { required: true, content: { application/json: { schema: { type: object, properties: { unitId: { type: string }, attributes: { type: object } } } } } }
+      responses:
+        '200': { description: Result., content: { application/json: { schema: { $ref: '#/components/schemas/GateResult' } } } }
+  /apps/{app}/environments/{env}/experiments/{name}/assign:
+    parameters: [ { $ref: '#/components/parameters/App' }, { $ref: '#/components/parameters/Env' }, { $ref: '#/components/parameters/Name' } ]
+    post:
+      tags: [Runtime]
+      operationId: assignVariant
+      summary: Get an experiment variant remotely
+      security: [ { appCredential: [] }, { bearerToken: [] } ]
+      requestBody: { required: true, content: { application/json: { schema: { type: object, required: [unitId], properties: { unitId: { type: string }, attributes: { type: object } } } } } }
+      responses:
+        '200': { description: Assignment., content: { application/json: { schema: { $ref: '#/components/schemas/VariantResult' } } } }
+
+  # ---------------------------------------------------------------- Sidecar
+  /sidecar/v1/head:
+    get:
+      tags: [Sidecar]
+      operationId: getBundleHead
+      summary: Current generation and download URLs
+      description: |
+        Returns the newest generation for the credential's app and environment, with short-lived download URLs for the
+        signed envelope and every resource (S3 presigned URLs, or `/sidecar/v1/blobs/{sha256}` with the filesystem store).
+        Send `If-None-Match` with the last ETag; `304` means nothing changed. Sidecars call this every 30 s and after every
+        `generation` event on `/sidecar/v1/watch`.
+      security: [ { appCredential: [] } ]
+      parameters:
+        - { name: If-None-Match, in: header, schema: { type: string } }
+        - { name: have, in: query, description: Comma-separated SHA-256 hashes the sidecar already holds; they are left out of `resources`., schema: { type: string } }
+      responses:
+        '200':
+          description: Head.
+          headers: { ETag: { schema: { type: string } } }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/BundleHead' }
+        '304': { description: Unchanged. }
+        '404': { description: Nothing published yet for this app and environment. }
+  /sidecar/v1/watch:
+    get:
+      tags: [Sidecar]
+      operationId: watchBundles
+      summary: Change feed (Server-Sent Events)
+      description: |
+        Long-lived stream. Events:
+
+        - `event: generation` · `data: {"generation": 42}` — call `/sidecar/v1/head` (after a random 0–2 s delay).
+        - `event: ping` every 15 s.
+
+        Reconnect with backoff (1 s → 60 s, jitter). Polling `/sidecar/v1/head` continues while disconnected.
+      security: [ { appCredential: [] } ]
+      responses:
+        '200':
+          description: Event stream.
+          content: { text/event-stream: { schema: { type: string } } }
+  /sidecar/v1/blobs/{sha256}:
+    parameters: [ { name: sha256, in: path, required: true, schema: { type: string, pattern: '^[a-f0-9]{64}$' } } ]
+    get:
+      tags: [Sidecar]
+      operationId: getBlob
+      summary: Download a blob (filesystem object store only)
+      description: Used when the server runs with `GEARBOX_OBJECT_STORE=file://…`. With S3 the head returns presigned S3 URLs instead.
+      security: [ { appCredential: [] } ]
+      parameters: [ { name: sig, in: query, required: true, schema: { type: string } }, { name: exp, in: query, required: true, schema: { type: integer } } ]
+      responses:
+        '200': { description: Bytes., content: { application/octet-stream: { schema: { type: string, contentMediaType: application/octet-stream } } } }
+  /sidecar/v1/heartbeat:
+    post:
+      tags: [Sidecar]
+      operationId: sidecarHeartbeat
+      summary: Report sidecar state (every 30 s)
+      security: [ { appCredential: [] } ]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/Heartbeat' } } } }
+      responses:
+        '204': { description: Recorded. }
+  /sidecar/v1/logs:
+    post:
+      tags: [Sidecar]
+      operationId: ingestLogs
+      summary: Upload a batch of log records
+      description: Optional sink for decision, update and exposure records when no OpenTelemetry collector is configured. Up to 1,000 records per batch; the server stores them with a retention TTL (default 14 days).
+      security: [ { appCredential: [] } ]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [records]
+              properties:
+                records:
+                  type: array
+                  maxItems: 1000
+                  items: { oneOf: [ { $ref: '#/components/schemas/DecisionLogRecord' }, { $ref: '#/components/schemas/UpdateLogRecord' }, { $ref: '#/components/schemas/ExposureRecord' } ] }
+      responses:
+        '202': { description: Accepted. }
+
+  # ---------------------------------------------------------------- Meta
+  /meta/expr:
+    get:
+      tags: [Meta]
+      operationId: getExprCatalogue
+      summary: Functions, operators and condition operators
+      description: Drives editor autocomplete and inline help. Static for a server version.
+      responses:
+        '200': { description: Catalogue., content: { application/json: { schema: { $ref: '#/components/schemas/ExprCatalogue' } } } }
+  /meta/version:
+    get:
+      tags: [Meta]
+      operationId: getServerVersion
+      summary: Server and engine versions
+      security: []
+      responses:
+        '200': { description: Versions., content: { application/json: { schema: { type: object, required: [server, engine], properties: { server: { type: string }, engine: { type: string }, minSidecar: { type: string } } } } } }
+
+components:
+  securitySchemes:
+    session:
+      type: apiKey
+      in: cookie
+      name: gbx_session
+      description: Set by `/auth/callback`. Mutating requests from the browser must also send `X-CSRF-Token` from `GET /session`.
+    bearerToken:
+      type: http
+      scheme: bearer
+      description: Personal access token (`gbx_pat_…`) for CLI and CI.
+    appCredential:
+      type: http
+      scheme: bearer
+      description: Sidecar credential (`gbx_cred_…`) scoped to one app and environment.
+
+  parameters:
+    App: { name: app, in: path, required: true, schema: { $ref: '#/components/schemas/Name' }, example: lead_service }
+    Env: { name: env, in: path, required: true, schema: { type: string, pattern: '^[a-z][a-z0-9-]{1,30}$' }, example: prod }
+    Name: { name: name, in: path, required: true, schema: { $ref: '#/components/schemas/Name' } }
+    Version: { name: version, in: path, required: true, schema: { type: integer, minimum: 1 } }
+    Kind: { name: kind, in: path, required: true, schema: { $ref: '#/components/schemas/ResourceKind' } }
+    ChangeRequestId: { name: id, in: path, required: true, schema: { type: string } }
+    Cursor: { name: cursor, in: query, schema: { type: string }, description: Opaque cursor from the previous page. }
+    Limit: { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 200, default: 50 } }
+
+  responses:
+    BadRequest: { description: Malformed request., content: { application/problem+json: { schema: { $ref: '#/components/schemas/Problem' } } } }
+    Unauthorized: { description: Not signed in., content: { application/problem+json: { schema: { $ref: '#/components/schemas/Problem' } } } }
+    Forbidden: { description: Signed in but not allowed., content: { application/problem+json: { schema: { $ref: '#/components/schemas/Problem' } } } }
+    NotFound: { description: No such resource., content: { application/problem+json: { schema: { $ref: '#/components/schemas/Problem' } } } }
+    Conflict:
+      description: Revision conflict, duplicate name, or resource in use.
+      content: { application/problem+json: { schema: { $ref: '#/components/schemas/Problem' }, examples: { stale: { value: { type: about:blank, title: Draft changed, status: 409, code: REVISION_CONFLICT, detail: Draft is at revision 8; you sent 7. Reload and apply your change again. } } } } }
+    Unprocessable:
+      description: The spec is invalid.
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+          examples:
+            schemaRequired:
+              value:
+                type: about:blank
+                title: Rule node needs schemas
+                status: 422
+                code: SCHEMA_REQUIRED
+                detail: Every rules and table node needs a registered inputSchema and outputSchema. Register them under Schemas first.
+                errors: [ { path: /nodes/1/inputSchema, code: SCHEMA_REQUIRED, message: inputSchema is required for a rules node } ]
+
+  examples:
+    LeadInput:
+      value:
+        lead: { id: L-1029384, first_name: Rahul, last_name: Sharma, phone: '+91-9876543210', city: Gurgaon, source: app }
+        car: { make: Maruti, model: Swift VXI, year: 2019, km: 48200, price: 525000 }
+        inspections: [ { part: engine, score: 8 }, { part: body, score: 5 }, { part: ac, score: 5.5 } ]
+    CreateLeadInputSchema:
+      summary: Register an input schema (nested objects, nullable fields, PII marker)
+      value:
+       name: lead_input
+       description: A used-car lead as sent by the lead service
+       spec:
+        jsonSchema:
+          type: object
+          required: [lead, car]
+          properties:
+            lead:
+              type: object
+              required: [id, city]
+              properties:
+                id: { type: string }
+                first_name: { type: [string, 'null'] }
+                last_name: { type: [string, 'null'] }
+                phone: { type: string, x-gearbox-pii: true }
+                city: { type: string }
+                source: { enum: [app, web, partner] }
+            car:
+              type: object
+              required: [year, km, price]
+              properties:
+                make: { type: string }
+                model: { type: string }
+                year: { type: integer, minimum: 1980 }
+                km: { type: integer, minimum: 0 }
+                price: { type: number, minimum: 0 }
+            inspections:
+              type: array
+              maxItems: 50
+              items: { type: object, required: [part, score], properties: { part: { type: string }, score: { type: number } } }
+        examples:
+          - lead: { id: L-1, city: Pune, source: web }
+            car: { year: 2021, km: 12000, price: 690000 }
+    CreateLeadRoutingDecision:
+      summary: A decision whose rule node uses registered schemas and a segment condition
+      value:
+       name: lead_routing
+       description: Route a lead to fast track, standard or review
+       spec:
+        entry: normalize
+        nodes:
+          - id: normalize
+            type: transform
+            outputSchema: { name: eligibility_input, version: 1 }
+            fields:
+              - { target: city, expr: input.lead.city }
+              - { target: source, expr: input.lead.source }
+              - { target: ageYears, expr: ctx.now.Year() - input.car.year }
+              - { target: km, expr: input.car.km }
+              - { target: price, expr: input.car.price }
+              - { target: inspectionAvg, expr: 'mean(map(input.inspections ?? [], .score)) ?? 0' }
+            next: eligibility
+          - id: eligibility
+            type: rules
+            inputSchema: { name: eligibility_input, version: 1 }
+            outputSchema: { name: eligibility_output, version: 1 }
+            mode: first_match
+            rules:
+              - id: r1
+                name: Blocked city
+                when: { segment: blocked_cities, op: IN_SEGMENT, key: input.city }
+                then: { eligible: false, reason: city_not_served }
+              - id: r2
+                name: Too old
+                when: { field: ageYears, op: GT, value: 12 }
+                then: { eligible: false, reason: car_too_old }
+              - id: r4
+                name: Fast lane
+                rollout: { percent: 25, salt: eligibility.r4 }
+                when:
+                  all:
+                    - { field: price, op: BETWEEN, value: 300000, valueTo: 2500000 }
+                    - { field: source, op: IN, value: [app, web] }
+                    - { field: inspectionAvg, op: GTE, value: 7 }
+                    - { segment: metro_premium, op: NOT_IN_SEGMENT, attributes: { city: input.city, price: input.price } }
+                then: { eligible: true, lane: fast, reason: fast_lane }
+            default: { eligible: true, lane: standard, reason: default }
+            next: output
+          - id: output
+            type: output
+            fields:
+              - { target: route, expr: 'nodes.eligibility.eligible ? (nodes.eligibility.lane == "fast" ? "fast_track" : "standard") : "reject"' }
+              - { target: reason, expr: nodes.eligibility.reason }
+        output: { schema: { name: routing_output, version: 1 } }
+        fallback: { route: manual_review, reason: fallback }
+        tests:
+          - name: fast track
+            ctx: { now: '2026-10-30T10:00:00Z', unit: L-1029384 }
+            input: { lead: { id: L-1029384, city: Gurgaon, source: app }, car: { year: 2019, km: 48200, price: 525000 }, inspections: [ { part: engine, score: 8 } ] }
+            expect: { route: fast_track }
+    EvaluateFastTrack:
+      value:
+        output: { route: fast_track, reason: fast_lane }
+        decisionVersion: lead_routing@draft
+        dependencyHash: sha256:5c0e9a…
+        fallbackUsed: false
+        evalMicros: 23
+        evaluatedAt: '2026-10-30T10:00:00Z'
+        path:
+          - { nodeId: normalize, nodeType: transform, outcome: ok, micros: 9, input: { lead: { city: Gurgaon } }, output: { city: Gurgaon, ageYears: 7, price: 525000, inspectionAvg: 8 } }
+          - { nodeId: eligibility, nodeType: rules, outcome: r4, micros: 3, output: { eligible: true, lane: fast, reason: fast_lane } }
+          - { nodeId: output, nodeType: output, outcome: ok, micros: 2, output: { route: fast_track, reason: fast_lane } }
+
+  schemas:
+    # ---------- basics
+    Name:
+      type: string
+      pattern: '^[a-z][a-z0-9_]{1,62}$'
+      examples: [lead_routing]
+    Expr:
+      type: string
+      maxLength: 4096
+      description: An Expr expression (code slot). See `GET /meta/expr` for functions.
+      examples: ['input.car.price / 100000']
+    ResourceKind:
+      type: string
+      enum: [schemas, decisions, segments, lookups, gates, experiments, layers]
+    Source:
+      type: string
+      enum: [draft, version]
+      default: draft
+    Problem:
+      type: object
+      description: RFC 9457 problem details.
+      required: [title, status, code]
+      properties:
+        type: { type: string, default: about:blank }
+        title: { type: string }
+        status: { type: integer }
+        code:
+          type: string
+          description: Stable machine-readable code.
+          examples: [SCHEMA_REQUIRED, SCHEMA_NOT_FOUND, VALIDATION_FAILED, TESTS_FAILED, REVISION_CONFLICT, NAME_TAKEN, IN_USE, NOT_FOUND, UNAUTHENTICATED, FORBIDDEN, SELF_APPROVAL, NOT_APPROVED, BUNDLE_TOO_LARGE, INVALID_ARGUMENT]
+        detail: { type: string }
+        instance: { type: string }
+        errors:
+          type: array
+          items: { $ref: '#/components/schemas/FieldError' }
+    FieldError:
+      type: object
+      required: [path, message]
+      properties:
+        path: { type: string, description: JSON pointer into the request body or spec. }
+        code: { type: string }
+        message: { type: string }
+    ValidationProblem:
+      type: object
+      required: [code, severity, path, message]
+      properties:
+        code: { type: string, examples: [SCHEMA_REQUIRED, SCHEMA_NOT_FOUND, TYPE_MISMATCH, UNKNOWN_FIELD, UNKNOWN_FUNCTION, CYCLE, UNREACHABLE_NODE, NODE_MAY_NOT_HAVE_RUN, SCHEMA_EDGE_MISMATCH, COST_TOO_HIGH, PII_IN_PROMPT, SEGMENT_NOT_FOUND, PARSE_ERROR] }
+        severity: { enum: [error, warning] }
+        path: { type: string, description: JSON pointer into the spec. }
+        message: { type: string }
+    ValidationResult:
+      type: object
+      required: [valid, problems]
+      properties:
+        valid: { type: boolean }
+        problems: { type: array, items: { $ref: '#/components/schemas/ValidationProblem' } }
+        dependencies:
+          type: array
+          description: Resources this spec reads (filled when valid).
+          items: { $ref: '#/components/schemas/ResourceRef' }
+    ResourceRef:
+      type: object
+      required: [kind, name]
+      properties:
+        kind: { $ref: '#/components/schemas/ResourceKind' }
+        name: { $ref: '#/components/schemas/Name' }
+        version: { type: integer, description: Present when the reference pins a version (schemas always do). }
+    SchemaRef:
+      type: object
+      description: A pinned schema version from the registry.
+      required: [name, version]
+      properties:
+        name: { $ref: '#/components/schemas/Name' }
+        version: { type: integer, minimum: 1 }
+
+    # ---------- session, apps, members
+    Role:
+      type: string
+      enum: [viewer, author, approver, admin]
+      description: viewer reads; author drafts, tests and opens change requests; approver approves, rolls out and rolls back; admin manages apps, credentials, members and webhooks.
+    Member:
+      type: object
+      required: [id, email, role]
+      properties:
+        id: { type: string }
+        email: { type: string, format: email }
+        name: { type: string }
+        role: { $ref: '#/components/schemas/Role' }
+        apps: { type: array, items: { $ref: '#/components/schemas/Name' }, description: Empty means all apps. }
+    MemberInput:
+      type: object
+      required: [email, role]
+      properties:
+        email: { type: string, format: email }
+        name: { type: string }
+        role: { $ref: '#/components/schemas/Role' }
+        apps: { type: array, items: { $ref: '#/components/schemas/Name' } }
+    Session:
+      type: object
+      required: [member, csrfToken]
+      properties:
+        member: { $ref: '#/components/schemas/Member' }
+        csrfToken: { type: string }
+    App:
+      type: object
+      required: [name, environments, createdAt]
+      properties:
+        name: { $ref: '#/components/schemas/Name' }
+        description: { type: string }
+        owners: { type: array, items: { type: string } }
+        environments: { type: array, items: { type: string }, examples: [[dev, stage, prod]] }
+        bundleLimitMB: { type: integer, default: 64 }
+        createdAt: { type: string, format: date-time }
+    AppCreate:
+      type: object
+      required: [name]
+      properties:
+        name: { $ref: '#/components/schemas/Name' }
+        description: { type: string }
+        owners: { type: array, items: { type: string } }
+        environments: { type: array, items: { type: string }, default: [dev, stage, prod] }
+    AppUpdate:
+      type: object
+      properties:
+        description: { type: string }
+        owners: { type: array, items: { type: string } }
+        bundleLimitMB: { type: integer, minimum: 1, maximum: 256 }
+    EnvironmentPolicy:
+      type: object
+      properties:
+        requiredApprovals: { type: integer, minimum: 0, maximum: 5 }
+        authorCanApprove: { type: boolean }
+        allowDataReleases: { type: boolean, description: Segment and lookup versions may be published without a change request when all dependent tests pass. }
+        logSampleRate: { type: number, minimum: 0, maximum: 1, description: Default decision-log sampling for sidecars. }
+    Environment:
+      type: object
+      required: [name, policy, generation]
+      properties:
+        name: { type: string }
+        policy: { $ref: '#/components/schemas/EnvironmentPolicy' }
+        generation: { type: integer, description: Current bundle generation (0 before the first release). }
+        publishedAt: { type: string, format: date-time }
+    Credential:
+      type: object
+      required: [id, environment, state, createdAt]
+      properties:
+        id: { type: string }
+        environment: { type: string }
+        label: { type: string }
+        state: { enum: [active, revoked] }
+        createdAt: { type: string, format: date-time }
+        createdBy: { type: string }
+        lastUsedAt: { type: string, format: date-time }
+    CredentialCreated:
+      type: object
+      required: [credential, secret]
+      properties:
+        credential: { $ref: '#/components/schemas/Credential' }
+        secret: { type: string, description: Shown once. }
+
+    # ---------- generic resources
+    ResourceSummary:
+      type: object
+      required: [kind, name, latestVersion, live, updatedAt]
+      properties:
+        kind: { $ref: '#/components/schemas/ResourceKind' }
+        name: { $ref: '#/components/schemas/Name' }
+        description: { type: string }
+        subtype: { type: string, description: 'Decisions: graph | rules | table | transform (shape of the entry node). Segments: static | dynamic | rollout.' }
+        latestVersion: { type: integer, description: 0 when no version has been cut. }
+        draftChanged: { type: boolean, description: The draft differs from the latest version. }
+        live:
+          type: object
+          description: Live state per environment.
+          additionalProperties: { $ref: '#/components/schemas/LiveState' }
+        updatedAt: { type: string, format: date-time }
+        updatedBy: { type: string }
+        stats: { $ref: '#/components/schemas/ResourceStats' }
+    LiveState:
+      type: object
+      required: [version]
+      properties:
+        version: { type: integer }
+        rollout:
+          type: object
+          description: Present while a new version is rolling out.
+          required: [fromVersion, percent]
+          properties:
+            fromVersion: { type: integer }
+            percent: { type: integer, minimum: 0, maximum: 100 }
+    ResourceStats:
+      type: object
+      description: Decisions only, last hour in the selected environment (prod by default).
+      properties:
+        p99Micros: { type: integer }
+        callsPerMinute: { type: number }
+        fallbackRate: { type: number }
+    Resource:
+      type: object
+      required: [kind, name, draft, latestVersion, live]
+      properties:
+        kind: { $ref: '#/components/schemas/ResourceKind' }
+        name: { $ref: '#/components/schemas/Name' }
+        description: { type: string }
+        draft:
+          type: object
+          required: [spec, revision, updatedAt]
+          properties:
+            spec: { $ref: '#/components/schemas/ResourceSpec' }
+            revision: { type: integer }
+            updatedAt: { type: string, format: date-time }
+            updatedBy: { type: string }
+            validation: { $ref: '#/components/schemas/ValidationResult' }
+        latestVersion: { type: integer }
+        live: { type: object, additionalProperties: { $ref: '#/components/schemas/LiveState' } }
+    ResourceCreate:
+      type: object
+      required: [name, spec]
+      properties:
+        name: { $ref: '#/components/schemas/Name' }
+        description: { type: string, maxLength: 500 }
+        spec: { $ref: '#/components/schemas/ResourceSpec' }
+    DraftSave:
+      type: object
+      required: [revision, spec]
+      properties:
+        revision: { type: integer }
+        description: { type: string, maxLength: 500 }
+        spec: { $ref: '#/components/schemas/ResourceSpec' }
+    VersionInfo:
+      type: object
+      required: [version, contentHash, createdAt, createdBy]
+      properties:
+        version: { type: integer }
+        message: { type: string }
+        contentHash: { type: string, examples: ['sha256:9f2c…'] }
+        createdAt: { type: string, format: date-time }
+        createdBy: { type: string }
+        breaking: { type: boolean, description: Schemas only. }
+    ResourceVersion:
+      type: object
+      required: [kind, name, info, spec]
+      properties:
+        kind: { $ref: '#/components/schemas/ResourceKind' }
+        name: { $ref: '#/components/schemas/Name' }
+        info: { $ref: '#/components/schemas/VersionInfo' }
+        spec: { $ref: '#/components/schemas/ResourceSpec' }
+    Usage:
+      type: object
+      required: [kind, name]
+      properties:
+        kind: { $ref: '#/components/schemas/ResourceKind' }
+        name: { $ref: '#/components/schemas/Name' }
+        version: { type: integer, description: Version of the user (absent for drafts). }
+        usesVersion: { type: integer, description: For schemas, which schema version it uses. }
+        where: { type: string, examples: [/nodes/1/inputSchema] }
+    ResourceSpec:
+      description: The spec for the resource kind in the path.
+      oneOf:
+        - { $ref: '#/components/schemas/SchemaSpec' }
+        - { $ref: '#/components/schemas/DecisionSpec' }
+        - { $ref: '#/components/schemas/SegmentSpec' }
+        - { $ref: '#/components/schemas/LookupSpec' }
+        - { $ref: '#/components/schemas/GateSpec' }
+        - { $ref: '#/components/schemas/ExperimentSpec' }
+        - { $ref: '#/components/schemas/LayerSpec' }
+
+    # ---------- schema registry
+    SchemaSpec:
+      type: object
+      title: SchemaSpec
+      description: |
+        A registered data shape. `jsonSchema` is JSON Schema 2020-12 restricted to:
+        `type` (one type or a list; add `"null"` to make a field nullable), `properties`, `required`,
+        `additionalProperties`, `items`, `prefixItems`, `enum`, `const`, `minimum`, `maximum`, `exclusiveMinimum`,
+        `exclusiveMaximum`, `minLength`, `maxLength`, `pattern` (RE2), `format` (`date-time`, `date`, `email`, `uuid`),
+        `minItems`, `maxItems`, `description`, `default`, `$defs` and local `$ref`, plus `x-gearbox-pii: true`.
+        Objects nest to any depth (32 max); nothing is flattened. The root may be any type, so an output schema can be a
+        plain string or number.
+
+        Every array that a rule or transform loops over must declare `maxItems` (cost limit).
+      required: [jsonSchema]
+      properties:
+        jsonSchema: { type: object, additionalProperties: true }
+        examples: { type: array, items: {}, description: Sample documents; each must validate. Used for editor previews and test scaffolding. }
+
+    # ---------- decisions
+    DecisionSpec:
+      type: object
+      title: DecisionSpec
+      required: [entry, nodes]
+      properties:
+        entry: { type: string, description: ID of the first node. }
+        inputSchema:
+          $ref: '#/components/schemas/SchemaRef'
+          description: Optional schema for the request input. When the entry node is a rules or table node, the request is checked against that node's inputSchema instead.
+        nodes:
+          type: array
+          minItems: 1
+          maxItems: 200
+          items: { $ref: '#/components/schemas/Node' }
+        output:
+          type: object
+          properties:
+            schema: { $ref: '#/components/schemas/SchemaRef' }
+        fallback: { description: 'Data slot. Returned (with fallbackUsed=true) when a node fails and has no onError edge.' }
+        logging: { $ref: '#/components/schemas/LoggingSpec' }
+        budgetMicros: { type: integer, default: 200, description: Evaluation budget (AI time excluded). Checked at publish; the runtime breaker opens at 10x. }
+        tests: { type: array, maxItems: 500, items: { $ref: '#/components/schemas/TestCase' } }
+    LoggingSpec:
+      type: object
+      properties:
+        sample: { type: number, minimum: 0, maximum: 1, description: Overrides the environment default. 1 for audit decisions. }
+        fields: { type: array, items: { type: string }, description: Input/output paths stored in clear (PII fields never are). }
+        aiPayloads: { type: boolean, default: false }
+    NodeBase:
+      type: object
+      required: [id, type]
+      properties:
+        id: { type: string, pattern: '^[a-z][a-z0-9_]{0,62}$' }
+        type: { type: string }
+        description: { type: string }
+        from: { $ref: '#/components/schemas/Expr', description: 'Code slot. What this node receives as `input`. Default: the output of the node that ran just before (the request input for the entry node).' }
+        next: { type: string, description: 'Next node ID, or "end" to return this node''s output. Default: none (the decision ends here).' }
+        onError: { type: string, description: Node to run if this node fails. Without it the decision's fallback is returned. }
+        position: { type: object, properties: { x: { type: number }, y: { type: number } }, description: Editor layout only. }
+    Node:
+      discriminator:
+        propertyName: type
+        mapping:
+          rules: '#/components/schemas/RulesNode'
+          table: '#/components/schemas/TableNode'
+          transform: '#/components/schemas/TransformNode'
+          switch: '#/components/schemas/SwitchNode'
+          lookup: '#/components/schemas/LookupNode'
+          gate: '#/components/schemas/GateNode'
+          experiment: '#/components/schemas/ExperimentNode'
+          subdecision: '#/components/schemas/SubdecisionNode'
+          ai: '#/components/schemas/AINode'
+          output: '#/components/schemas/OutputNode'
+      oneOf:
+        - { $ref: '#/components/schemas/RulesNode' }
+        - { $ref: '#/components/schemas/TableNode' }
+        - { $ref: '#/components/schemas/TransformNode' }
+        - { $ref: '#/components/schemas/SwitchNode' }
+        - { $ref: '#/components/schemas/LookupNode' }
+        - { $ref: '#/components/schemas/GateNode' }
+        - { $ref: '#/components/schemas/ExperimentNode' }
+        - { $ref: '#/components/schemas/SubdecisionNode' }
+        - { $ref: '#/components/schemas/AINode' }
+        - { $ref: '#/components/schemas/OutputNode' }
+    RulesNode:
+      title: RulesNode
+      description: |
+        A rule set. **Needs a registered `inputSchema` and `outputSchema`.** At runtime the node's input is checked against
+        `inputSchema` before any rule runs (failure → `onError` / fallback; for the entry node → `INVALID_ARGUMENT`).
+        Every `then` and the `default` must match `outputSchema` (checked at save for literal data, at runtime for `=` expressions).
+      allOf:
+        - { $ref: '#/components/schemas/NodeBase' }
+        - type: object
+          required: [type, inputSchema, outputSchema, rules]
+          properties:
+            type: { const: rules }
+            inputSchema: { $ref: '#/components/schemas/SchemaRef' }
+            outputSchema: { $ref: '#/components/schemas/SchemaRef' }
+            mode: { enum: [first_match, all_matches], default: first_match, description: 'all_matches returns {"matches": [then, …]}; outputSchema then describes one match.' }
+            rules: { type: array, maxItems: 500, items: { $ref: '#/components/schemas/Rule' } }
+            default: { description: Data slot. Returned when no rule matches. Must match outputSchema. }
+    Rule:
+      type: object
+      required: [id, when, then]
+      properties:
+        id: { type: string, pattern: '^[a-zA-Z0-9_]{1,40}$' }
+        name: { type: string }
+        description: { type: string }
+        enabled: { type: boolean, default: true }
+        priority: { type: integer, default: 0, description: Higher runs first; equal keeps list order. }
+        when: { $ref: '#/components/schemas/Condition' }
+        then: { description: Data slot matching the node's outputSchema. }
+        rollout:
+          type: object
+          description: Limits the rule to a stable share of units. Calls without a unit never match.
+          required: [percent]
+          properties:
+            percent: { type: number, minimum: 0, maximum: 100 }
+            salt: { type: string, description: 'Default: "<decision>.<node>.<rule id>".' }
+    Condition:
+      description: |
+        A condition tree. Combine with `all` (AND), `any` (OR), `not`. Leaves:
+
+        - **field**: `{field, op, value, valueTo}` — `field` is a dotted path into the node input (`car.price`, `lead.address.pincode`); type-checked against the input schema.
+        - **segment**: `{segment, op: IN_SEGMENT | NOT_IN_SEGMENT, key?, attributes?}` — static segments need `key`, dynamic segments need `attributes` matching their `attributesSchema`, rollout segments use `key` or the request unit.
+        - **gate**: `{gate, op: GATE_PASSES | GATE_FAILS}`.
+        - **variant**: `{experiment, variants: [..]}` — true when the unit is assigned one of those variants.
+        - **expr**: `{expr}` — any boolean Expr expression.
+
+        A missing or null field makes every positive and negative operator false (only `NOT_EXISTS` is true).
+      oneOf:
+        - { $ref: '#/components/schemas/AllCondition' }
+        - { $ref: '#/components/schemas/AnyCondition' }
+        - { $ref: '#/components/schemas/NotCondition' }
+        - { $ref: '#/components/schemas/FieldCondition' }
+        - { $ref: '#/components/schemas/SegmentCondition' }
+        - { $ref: '#/components/schemas/GateCondition' }
+        - { $ref: '#/components/schemas/VariantCondition' }
+        - { $ref: '#/components/schemas/ExprCondition' }
+    AllCondition: { type: object, title: all, required: [all], additionalProperties: false, properties: { all: { type: array, minItems: 1, items: { $ref: '#/components/schemas/Condition' } } } }
+    AnyCondition: { type: object, title: any, required: [any], additionalProperties: false, properties: { any: { type: array, minItems: 1, items: { $ref: '#/components/schemas/Condition' } } } }
+    NotCondition: { type: object, title: not, required: [not], additionalProperties: false, properties: { not: { $ref: '#/components/schemas/Condition' } } }
+    FieldOperator:
+      type: string
+      enum: [EQ, NEQ, EQ_CASE_INSENSITIVE, NEQ_CASE_INSENSITIVE, GT, GTE, LT, LTE, BETWEEN, IN, NOT_IN, IN_CASE_INSENSITIVE, NOT_IN_CASE_INSENSITIVE, IN_NUMERIC, NOT_IN_NUMERIC, CONTAINS, NOT_CONTAINS, CONTAINS_CASE_INSENSITIVE, NOT_CONTAINS_CASE_INSENSITIVE, CONTAINS_NUMERIC, NOT_CONTAINS_NUMERIC, CONTAINS_ANY, CONTAINS_NONE, STARTS_WITH, ENDS_WITH, STARTS_WITH_CASE_INSENSITIVE, ENDS_WITH_CASE_INSENSITIVE, MATCHES, NOT_MATCHES, MATCHES_CASE_INSENSITIVE, NOT_MATCHES_CASE_INSENSITIVE, EXISTS, NOT_EXISTS, IS_TRUE, IS_FALSE]
+    FieldCondition:
+      type: object
+      title: field
+      required: [field, op]
+      additionalProperties: false
+      properties:
+        field: { type: string, description: Dotted path into the node input. }
+        op: { $ref: '#/components/schemas/FieldOperator' }
+        value: { description: Scalar or list depending on op. }
+        valueTo: { description: Upper bound for BETWEEN (inclusive). }
+    SegmentCondition:
+      type: object
+      title: segment
+      required: [segment, op]
+      additionalProperties: false
+      properties:
+        segment: { $ref: '#/components/schemas/Name' }
+        op: { enum: [IN_SEGMENT, NOT_IN_SEGMENT] }
+        key: { $ref: '#/components/schemas/Expr', description: 'Static and rollout segments: the member key, e.g. input.dealer.id. Rollout default: ctx.unit.' }
+        attributes:
+          type: object
+          description: Dynamic segments only. Map from the segment's attribute names to expressions over this node's input.
+          additionalProperties: { $ref: '#/components/schemas/Expr' }
+    GateCondition: { type: object, title: gate, required: [gate, op], additionalProperties: false, properties: { gate: { $ref: '#/components/schemas/Name' }, op: { enum: [GATE_PASSES, GATE_FAILS] } } }
+    VariantCondition: { type: object, title: variant, required: [experiment, variants], additionalProperties: false, properties: { experiment: { $ref: '#/components/schemas/Name' }, variants: { type: array, minItems: 1, items: { type: string } } } }
+    ExprCondition: { type: object, title: expr, required: [expr], additionalProperties: false, properties: { expr: { $ref: '#/components/schemas/Expr' } } }
+    TableNode:
+      title: TableNode
+      description: A decision table. Same schema rule as rules nodes.
+      allOf:
+        - { $ref: '#/components/schemas/NodeBase' }
+        - type: object
+          required: [type, inputSchema, outputSchema, inputs, outputs, rows]
+          properties:
+            type: { const: table }
+            inputSchema: { $ref: '#/components/schemas/SchemaRef' }
+            outputSchema: { $ref: '#/components/schemas/SchemaRef' }
+            hitPolicy: { enum: [first, unique, collect, priority], default: first }
+            inputs:
+              type: array
+              items: { type: object, required: [name, expr], properties: { name: { type: string }, expr: { $ref: '#/components/schemas/Expr' } } }
+            outputs: { type: array, items: { type: string }, description: Output property names (must exist in outputSchema). }
+            rows:
+              type: array
+              maxItems: 5000
+              items:
+                type: object
+                required: [id, when, then]
+                properties:
+                  id: { type: string }
+                  priority: { type: integer }
+                  when: { type: object, additionalProperties: { type: string }, description: 'Cell per input: "-" any, "< 300000", "[a..b]", JSON list, or an Expr using `value`.' }
+                  then: { type: object, description: Data slot per output. }
+            default: { description: Data slot when no row matches. }
+    TransformNode:
+      title: TransformNode
+      description: Reshape JSON. Fields are assigned in order; later fields may read `out`.
+      allOf:
+        - { $ref: '#/components/schemas/NodeBase' }
+        - type: object
+          required: [type]
+          properties:
+            type: { const: transform }
+            mode: { enum: [build, patch], default: build }
+            fields: { type: array, maxItems: 500, items: { type: object, required: [target, expr], properties: { target: { type: string, description: 'Dotted path; items[0].x and items[].x allowed.' }, expr: { $ref: '#/components/schemas/Expr' } } } }
+            expression: { $ref: '#/components/schemas/Expr', description: Alternative to fields — one expression that builds the whole output. }
+            defaults: { type: array, items: { type: object, required: [target, value], properties: { target: { type: string }, value: { description: Data slot. } } } }
+            drop: { type: array, items: { type: string } }
+            omitNil: { type: boolean, default: true }
+            outputSchema: { $ref: '#/components/schemas/SchemaRef', description: Optional. When set, the output is checked against it (and the next rules node's inputSchema must accept it). }
+    SwitchNode:
+      title: SwitchNode
+      allOf:
+        - { $ref: '#/components/schemas/NodeBase' }
+        - type: object
+          required: [type, cases, default]
+          properties:
+            type: { const: switch }
+            cases: { type: array, items: { type: object, required: [when, next], properties: { id: { type: string }, when: { $ref: '#/components/schemas/Expr' }, next: { type: string } } } }
+            default: { type: string, description: Node to run when no case matches. }
+    LookupNode:
+      title: LookupNode
+      allOf:
+        - { $ref: '#/components/schemas/NodeBase' }
+        - type: object
+          required: [type, lookup, key]
+          properties:
+            type: { const: lookup }
+            lookup: { $ref: '#/components/schemas/Name' }
+            key: { $ref: '#/components/schemas/Expr' }
+            default: { description: Data slot when the key is missing. }
+    GateNode:
+      title: GateNode
+      allOf:
+        - { $ref: '#/components/schemas/NodeBase' }
+        - { type: object, required: [type, gate], properties: { type: { const: gate }, gate: { $ref: '#/components/schemas/Name' } } }
+    ExperimentNode:
+      title: ExperimentNode
+      allOf:
+        - { $ref: '#/components/schemas/NodeBase' }
+        - { type: object, required: [type, experiment], properties: { type: { const: experiment }, experiment: { $ref: '#/components/schemas/Name' } } }
+    SubdecisionNode:
+      title: SubdecisionNode
+      allOf:
+        - { $ref: '#/components/schemas/NodeBase' }
+        - { type: object, required: [type, decision], properties: { type: { const: subdecision }, decision: { $ref: '#/components/schemas/Name' }, input: { $ref: '#/components/schemas/Expr' } } }
+    AINode:
+      title: AINode
+      description: |
+        One call to the Integration Hub. Does not need registry schemas; `responseSchema` (inline JSON Schema) describes the
+        answer. Only `vars` reach the prompt; a var derived from a PII field fails validation. Timeouts, Hub errors and
+        answers that do not match `responseSchema` take `onError` (required).
+      allOf:
+        - { $ref: '#/components/schemas/NodeBase' }
+        - type: object
+          required: [type, model, mode, timeoutMs, prompt, responseSchema, onError]
+          properties:
+            type: { const: ai }
+            model: { type: string, examples: [reasoning-default] }
+            mode: { enum: [shadow, inline, precompute] }
+            timeoutMs: { type: integer, minimum: 50, maximum: 10000 }
+            vars: { type: object, additionalProperties: { $ref: '#/components/schemas/Expr' } }
+            prompt: { type: object, required: [user], properties: { system: { type: string }, user: { type: string, description: 'Text with {{ var }} placeholders.' } } }
+            responseSchema: { type: object, additionalProperties: true }
+            maxOutputTokens: { type: integer, default: 300 }
+            cache: { type: object, properties: { ttlSeconds: { type: integer }, maxEntries: { type: integer } } }
+            budget: { type: object, properties: { maxCallsPerMinute: { type: integer, description: For the whole app and environment. } } }
+    OutputNode:
+      title: OutputNode
+      description: Builds the decision's response. Checked against `output.schema` when set.
+      allOf:
+        - { $ref: '#/components/schemas/NodeBase' }
+        - type: object
+          required: [type]
+          properties:
+            type: { const: output }
+            fields: { type: array, items: { type: object, required: [target, expr], properties: { target: { type: string }, expr: { $ref: '#/components/schemas/Expr' } } } }
+            expression: { $ref: '#/components/schemas/Expr' }
+    TestCase:
+      type: object
+      required: [name, input]
+      properties:
+        name: { type: string }
+        ctx: { type: object, properties: { now: { type: string, format: date-time }, unit: { type: string } } }
+        input: { description: Request input. }
+        expect: { description: 'Data slot. Partial match: listed paths must equal; others are ignored.' }
+        expectError: { type: string, description: Expected error code, e.g. INPUT_SCHEMA. }
+        expectPath: { type: array, items: { type: string }, description: 'Expected outcomes in order, e.g. ["eligibility:r4", "output:ok"].' }
+
+    # ---------- segments, lookups, gates, experiments, layers
+    SegmentSpec:
+      type: object
+      title: SegmentSpec
+      required: [type]
+      properties:
+        type: { enum: [static, dynamic, rollout] }
+        static:
+          type: object
+          description: Members uploaded with `PUT …/members`.
+          properties:
+            keyType: { enum: [string, number], default: string }
+            pii: { type: boolean, default: false, description: Store and ship members as HMACs. }
+            memberCount: { type: integer, readOnly: true }
+        dynamic:
+          type: object
+          description: Membership computed at decision time from attributes the rule passes in.
+          required: [attributesSchema, when]
+          properties:
+            attributesSchema: { $ref: '#/components/schemas/SchemaRef' }
+            when: { $ref: '#/components/schemas/Condition' }
+        rollout:
+          type: object
+          description: A stable share of units (bucket of murmur3(salt + key) mod 10000).
+          required: [percent]
+          properties:
+            percent: { type: number, minimum: 0, maximum: 100 }
+            salt: { type: string, description: 'Default: the segment name. Changing it reshuffles units.' }
+            include: { $ref: '#/components/schemas/Condition', description: Optional targeting applied before bucketing (over attributes). }
+    LookupSpec:
+      type: object
+      title: LookupSpec
+      required: [keyType, valueSchema]
+      properties:
+        keyType: { enum: [string, number] }
+        valueSchema: { $ref: '#/components/schemas/SchemaRef' }
+        rowCount: { type: integer, readOnly: true }
+    LookupRow:
+      type: object
+      required: [key, value]
+      properties:
+        key: { type: string }
+        value: {}
+    GateSpec:
+      type: object
+      title: GateSpec
+      required: [rules, default]
+      properties:
+        enabled: { type: boolean, default: true }
+        attributesSchema: { $ref: '#/components/schemas/SchemaRef', description: Optional; type-checks rule conditions. }
+        rules:
+          type: array
+          items:
+            type: object
+            required: [id, when, value]
+            properties:
+              id: { type: string }
+              when: { $ref: '#/components/schemas/Condition' }
+              value: { type: boolean }
+              rollout: { type: object, properties: { percent: { type: number }, salt: { type: string } } }
+        default: { type: boolean }
+    ExperimentSpec:
+      type: object
+      title: ExperimentSpec
+      required: [status, variants]
+      properties:
+        status: { enum: [draft, running, stopped] }
+        hypothesis: { type: string }
+        salt: { type: string }
+        layer: { $ref: '#/components/schemas/Name' }
+        holdoutPercent: { type: number, minimum: 0, maximum: 50, default: 0 }
+        targeting: { $ref: '#/components/schemas/Condition' }
+        attributesSchema: { $ref: '#/components/schemas/SchemaRef' }
+        variants:
+          type: array
+          minItems: 2
+          items:
+            type: object
+            required: [name, weight]
+            properties:
+              name: { type: string }
+              weight: { type: number, minimum: 0 }
+              parameters: { description: Data slot returned with the assignment. }
+        stoppedVariant: { type: string, description: Variant everyone gets after stop (default the first). }
+    LayerSpec:
+      type: object
+      title: LayerSpec
+      required: [allocations]
+      properties:
+        salt: { type: string }
+        allocations: { type: array, items: { type: object, required: [experiment, percent], properties: { experiment: { $ref: '#/components/schemas/Name' }, percent: { type: number } } }, description: Shares must sum to ≤ 100. }
+
+    DocumentValidation:
+      type: object
+      required: [valid, errors]
+      properties:
+        valid: { type: boolean }
+        errors: { type: array, items: { $ref: '#/components/schemas/FieldError' } }
+    SegmentCheckRequest:
+      type: object
+      properties:
+        source: { $ref: '#/components/schemas/Source' }
+        version: { type: integer }
+        key: { type: string }
+        unit: { type: string }
+        attributes: { type: object }
+
+    # ---------- evaluate / decide
+    EvalContext:
+      type: object
+      properties:
+        now: { type: string, format: date-time, description: Value of ctx.now (default the server clock). }
+        unit: { type: string }
+    EvaluateRequest:
+      type: object
+      required: [input]
+      properties:
+        source: { $ref: '#/components/schemas/Source' }
+        version: { type: integer }
+        environment: { type: string, default: dev, description: Whose live segments, lookups, gates and experiments to use. }
+        input: {}
+        ctx: { $ref: '#/components/schemas/EvalContext' }
+        skipAI: { type: boolean, default: true, description: Treat AI nodes as failed (take onError) instead of calling the Hub. }
+    PathStep:
+      type: object
+      required: [nodeId, nodeType, outcome]
+      properties:
+        nodeId: { type: string }
+        nodeType: { type: string }
+        outcome: { type: string, description: 'Matched rule ID, table row ID, switch case, "ok", "fallback", "error", "shadow".' }
+        micros: { type: integer }
+        input: { description: Test console only. }
+        output: { description: Test console only. }
+        error: { type: string }
+    DecideResult:
+      type: object
+      required: [output, decisionVersion, dependencyHash, fallbackUsed, evalMicros, evaluatedAt, path]
+      properties:
+        output: {}
+        decisionVersion: { type: string, examples: [lead_routing@17] }
+        dependencyHash: { type: string }
+        generation: { type: integer }
+        fallbackUsed: { type: boolean }
+        evalMicros: { type: integer }
+        requestId: { type: string }
+        evaluatedAt: { type: string, format: date-time }
+        path: { type: array, items: { $ref: '#/components/schemas/PathStep' } }
+    EvaluateResult:
+      allOf:
+        - { $ref: '#/components/schemas/DecideResult' }
+        - type: object
+          properties:
+            error: { $ref: '#/components/schemas/Problem' }
+    DecideRequest:
+      type: object
+      required: [decision, input]
+      properties:
+        decision: { $ref: '#/components/schemas/Name' }
+        input: {}
+        unitId: { type: string }
+        requestId: { type: string }
+        options:
+          type: object
+          properties:
+            trace: { type: boolean }
+            pinVersion: { type: integer }
+            now: { type: string, format: date-time }
+            forceLog: { type: boolean }
+    GateResult:
+      type: object
+      required: [value, gateVersion, ruleId]
+      properties:
+        value: { type: boolean }
+        gateVersion: { type: string }
+        ruleId: { type: string }
+        generation: { type: integer }
+    VariantResult:
+      type: object
+      required: [inExperiment, reason]
+      properties:
+        inExperiment: { type: boolean }
+        variant: { type: string }
+        parameters: {}
+        reason: { enum: [assigned, holdout, not_targeted, layer_conflict, stopped, no_unit] }
+        experimentVersion: { type: string }
+        generation: { type: integer }
+    TestRunResult:
+      type: object
+      required: [passed, failed, results]
+      properties:
+        passed: { type: integer }
+        failed: { type: integer }
+        results:
+          type: array
+          items:
+            type: object
+            required: [name, ok]
+            properties:
+              name: { type: string }
+              ok: { type: boolean }
+              actual: {}
+              expected: {}
+              mismatches: { type: array, items: { type: object, properties: { path: { type: string }, expected: {}, actual: {} } } }
+              error: { type: string }
+              micros: { type: integer }
+              path: { type: array, items: { $ref: '#/components/schemas/PathStep' } }
+
+    # ---------- change requests and releases
+    ChangeRequestStatus: { type: string, enum: [open, approved, rejected, withdrawn, published] }
+    ChangeItem:
+      type: object
+      required: [kind, name, version]
+      properties:
+        kind: { $ref: '#/components/schemas/ResourceKind' }
+        name: { $ref: '#/components/schemas/Name' }
+        version: { type: integer }
+        rollout: { type: object, properties: { percent: { type: integer, minimum: 1, maximum: 100 } }, description: Decisions only. Starts a gradual rollout from the current live version. }
+    ChangeRequestCreate:
+      type: object
+      required: [environment, title, items]
+      properties:
+        environment: { type: string }
+        title: { type: string, maxLength: 200 }
+        description: { type: string, maxLength: 5000 }
+        items: { type: array, minItems: 1, items: { $ref: '#/components/schemas/ChangeItem' } }
+    ChangeRequest:
+      type: object
+      required: [id, environment, title, items, status, author, createdAt]
+      properties:
+        id: { type: string }
+        environment: { type: string }
+        title: { type: string }
+        description: { type: string }
+        items:
+          type: array
+          items:
+            allOf:
+              - { $ref: '#/components/schemas/ChangeItem' }
+              - type: object
+                properties:
+                  liveVersion: { type: integer, description: Version live in the environment when the request was opened. }
+                  diff: { type: string, description: Unified YAML diff from the live version. }
+        status: { $ref: '#/components/schemas/ChangeRequestStatus' }
+        author: { type: string }
+        createdAt: { type: string, format: date-time }
+        approvals: { type: array, items: { type: object, required: [by, at], properties: { by: { type: string }, at: { type: string, format: date-time }, comment: { type: string } } } }
+        requiredApprovals: { type: integer }
+        comments: { type: array, items: { type: object, required: [by, at, body], properties: { by: { type: string }, at: { type: string, format: date-time }, body: { type: string } } } }
+        tests: { type: object, properties: { passed: { type: integer }, failed: { type: integer } } }
+        publishedGeneration: { type: integer }
+    ReleaseCreate:
+      type: object
+      required: [type]
+      properties:
+        type: { enum: [change_request, data, rollout, rollback, kill_switch] }
+        changeRequestId: { type: string }
+        items: { type: array, items: { $ref: '#/components/schemas/ChangeItem' } }
+        decision: { $ref: '#/components/schemas/Name' }
+        percent: { type: integer, minimum: 0, maximum: 100, description: 'rollout: 100 completes it, 0 returns everyone to the previous version.' }
+        toGeneration: { type: integer }
+        gate: { $ref: '#/components/schemas/Name' }
+        killed: { type: boolean }
+        reason: { type: string }
+    Release:
+      type: object
+      required: [generation, environment, type, publishedAt, publishedBy, manifestHash, contents]
+      properties:
+        generation: { type: integer }
+        environment: { type: string }
+        type: { enum: [change_request, data, rollout, rollback, kill_switch] }
+        changeRequestId: { type: string }
+        breakGlass: { type: boolean }
+        reason: { type: string }
+        publishedAt: { type: string, format: date-time }
+        publishedBy: { type: string }
+        manifestHash: { type: string }
+        bundleBytes: { type: integer }
+        minEngineVersion: { type: string }
+        contents:
+          type: array
+          description: Every resource in the bundle with its version (and rollout state for decisions).
+          items:
+            type: object
+            required: [kind, name, version]
+            properties:
+              kind: { $ref: '#/components/schemas/ResourceKind' }
+              name: { $ref: '#/components/schemas/Name' }
+              version: { type: integer }
+              rollout: { $ref: '#/components/schemas/LiveState' }
+              changed: { type: boolean }
+
+    # ---------- operations
+    Overview:
+      type: object
+      required: [generation, sidecars, decisions]
+      properties:
+        generation: { type: integer }
+        p99Micros: { type: integer }
+        callsPerMinute: { type: number }
+        fallbackRate: { type: number }
+        sidecars: { $ref: '#/components/schemas/FleetSummary' }
+        decisions: { type: integer }
+        pendingChangeRequests: { type: integer }
+        latencySeries: { type: array, items: { type: object, required: [at, p99Micros], properties: { at: { type: string, format: date-time }, p99Micros: { type: integer } } }, description: 48 half-hour points for the last 24 h. }
+        recentReleases: { type: array, items: { $ref: '#/components/schemas/Release' }, maxItems: 5 }
+    FleetSummary:
+      type: object
+      required: [total, onLatest]
+      properties:
+        total: { type: integer }
+        onLatest: { type: integer }
+        generations: { type: object, additionalProperties: { type: integer }, description: 'Sidecar count per generation, e.g. {"42": 212, "41": 2}.' }
+        versions: { type: object, additionalProperties: { type: integer } }
+        medianSyncLagSeconds: { type: number }
+    Sidecar:
+      type: object
+      required: [id, generation, lastSeenAt, status]
+      properties:
+        id: { type: string, description: Pod name or host ID. }
+        node: { type: string }
+        sidecarVersion: { type: string }
+        engineVersion: { type: string }
+        generation: { type: integer }
+        lastSyncAt: { type: string, format: date-time }
+        lastSeenAt: { type: string, format: date-time }
+        p99Micros: { type: integer }
+        status: { enum: [in_sync, behind, error] }
+        lastError: { type: string }
+    Heartbeat:
+      type: object
+      required: [id, sidecarVersion, engineVersion, generation]
+      properties:
+        id: { type: string }
+        node: { type: string }
+        sidecarVersion: { type: string }
+        engineVersion: { type: string }
+        generation: { type: integer }
+        lastSyncAt: { type: string, format: date-time }
+        lastError: { type: string }
+        p99Micros: { type: integer }
+        callsPerMinute: { type: number }
+        fallbackRate: { type: number }
+    UpdateResult: { type: string, enum: [swapped, kept_previous, loaded_from_disk, up_to_date] }
+    DecisionLogRecord:
+      type: object
+      required: [type, ts, requestId, decision, decisionVersion, generation, fallbackUsed, evalMicros, status]
+      properties:
+        type: { const: decision }
+        ts: { type: string, format: date-time }
+        requestId: { type: string }
+        traceId: { type: string }
+        sidecarId: { type: string }
+        decision: { type: string }
+        decisionVersion: { type: string }
+        dependencyHash: { type: string }
+        generation: { type: integer }
+        unitId: { type: string }
+        evaluatedAt: { type: string, format: date-time }
+        path: { type: array, items: { $ref: '#/components/schemas/PathStep' } }
+        fallbackUsed: { type: boolean }
+        evalMicros: { type: integer }
+        status: { type: string, examples: [OK, INVALID_ARGUMENT, INTERNAL] }
+        inputHmac: { type: string }
+        outputHmac: { type: string }
+        input: { type: object, description: Only fields listed in the decision's logging.fields (PII never). }
+        output: { description: Only listed fields. }
+        ai: { type: array, items: { type: object, properties: { node: { type: string }, model: { type: string }, latencyMs: { type: integer }, cacheHit: { type: boolean }, answerHash: { type: string }, result: { type: string } } } }
+    UpdateLogRecord:
+      type: object
+      required: [type, ts, sidecarId, fromGeneration, toGeneration, result]
+      properties:
+        type: { const: update }
+        ts: { type: string, format: date-time }
+        sidecarId: { type: string }
+        fromGeneration: { type: integer }
+        toGeneration: { type: integer }
+        result: { $ref: '#/components/schemas/UpdateResult' }
+        changed: { type: array, items: { type: object, properties: { kind: { type: string }, name: { type: string }, from: { type: integer }, to: { type: integer }, sha256: { type: string } } } }
+        signature: { enum: [valid, invalid, missing] }
+        downloadMs: { type: integer }
+        compileMs: { type: integer }
+        tests: { type: object, properties: { passed: { type: integer }, failed: { type: integer } } }
+        error: { type: string }
+    ExposureRecord:
+      type: object
+      required: [type, ts, unitId, experiment, experimentVersion, reason]
+      properties:
+        type: { const: exposure }
+        ts: { type: string, format: date-time }
+        unitId: { type: string }
+        experiment: { type: string }
+        experimentVersion: { type: string }
+        variant: { type: string }
+        reason: { type: string }
+        requestId: { type: string }
+        sidecarId: { type: string }
+    AuditEvent:
+      type: object
+      required: [id, at, actor, action, resource]
+      properties:
+        id: { type: string }
+        at: { type: string, format: date-time }
+        actor: { type: string }
+        action: { type: string, examples: [resource.created, draft.saved, version.cut, change_request.opened, change_request.approved, release.published, credential.revoked, member.role_changed] }
+        app: { type: string }
+        environment: { type: string }
+        resource: { type: string, examples: ['decisions/lead_routing@18'] }
+        breakGlass: { type: boolean }
+        details: { type: object }
+    ShadowReport:
+      type: object
+      required: [calls, agreement, matrix]
+      properties:
+        calls: { type: integer }
+        agreement: { type: number }
+        matrix: { type: object, required: [labels, rows], properties: { labels: { type: array, items: { type: string } }, rows: { type: array, items: { type: array, items: { type: integer } } } }, description: 'rows[i][j] = calls where the deciding path said labels[i] and the AI said labels[j].' }
+        latency: { type: object, properties: { p50Ms: { type: integer }, p95Ms: { type: integer } } }
+        timeoutRate: { type: number }
+        schemaFailureRate: { type: number }
+        disagreements: { type: array, items: { type: object, properties: { requestId: { type: string }, decided: { type: string }, ai: { type: string }, vars: { type: object } } } }
+    Webhook:
+      type: object
+      required: [id, url, events]
+      properties:
+        id: { type: string }
+        url: { type: string, format: uri }
+        events: { type: array, items: { type: string, enum: [release.published, release.rolled_back, change_request.opened, change_request.approved, sidecar.sync_failed] } }
+        lastDelivery: { type: object, properties: { at: { type: string, format: date-time }, status: { type: integer } } }
+    WebhookInput:
+      type: object
+      required: [url, events]
+      properties:
+        url: { type: string, format: uri }
+        events: { type: array, items: { type: string } }
+    BundleHead:
+      type: object
+      required: [app, environment, generation, envelope, resources]
+      properties:
+        app: { type: string }
+        environment: { type: string }
+        generation: { type: integer }
+        envelope: { type: object, required: [url, sha256], properties: { url: { type: string }, sha256: { type: string } }, description: 'SignedManifest (bundle.proto) bytes.' }
+        resources: { type: array, items: { type: object, required: [sha256, url], properties: { sha256: { type: string }, url: { type: string } } } }
+        expiresAt: { type: string, format: date-time }
+    ExprCatalogue:
+      type: object
+      required: [functions, operators, conditionOperators, variables]
+      properties:
+        variables: { type: array, items: { type: object, required: [name, description], properties: { name: { type: string }, type: { type: string }, description: { type: string } } } }
+        functions: { type: array, items: { type: object, required: [name, signature, description], properties: { name: { type: string }, signature: { type: string }, description: { type: string }, example: { type: string }, gearbox: { type: boolean } } } }
+        operators: { type: array, items: { type: object, required: [symbol, description], properties: { symbol: { type: string }, description: { type: string } } } }
+        conditionOperators: { type: array, items: { type: object, required: [op, description, valueKind], properties: { op: { type: string }, description: { type: string }, valueKind: { enum: [none, scalar, list, range, regex, segment, gate] } } } }

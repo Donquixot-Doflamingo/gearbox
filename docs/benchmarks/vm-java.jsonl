@@ -1,0 +1,10 @@
+{"client":"java","threads":1,"calls":10000,"perMinute":499331,"p50Micros":115,"p95Micros":145,"p99Micros":177}
+{"client":"java","threads":4,"calls":10000,"perMinute":1453925,"p50Micros":146,"p95Micros":252,"p99Micros":537}
+{"client":"java","threads":8,"calls":10000,"perMinute":2077565,"p50Micros":190,"p95Micros":440,"p99Micros":979}
+{"client":"java","threads":1,"calls":10000,"perMinute":462167,"p50Micros":120,"p95Micros":161,"p99Micros":311}
+{"client":"java","threads":4,"calls":10000,"perMinute":1501432,"p50Micros":143,"p95Micros":247,"p99Micros":493}
+{"client":"java","threads":8,"calls":10000,"perMinute":1945446,"p50Micros":211,"p95Micros":412,"p99Micros":1054}
+{"client":"java","threads":1,"calls":10000,"perMinute":492332,"p50Micros":115,"p95Micros":151,"p99Micros":218}
+{"client":"java","threads":4,"calls":10000,"perMinute":1420492,"p50Micros":149,"p95Micros":257,"p99Micros":577}
+{"client":"java","threads":8,"calls":10000,"perMinute":2128425,"p50Micros":199,"p95Micros":382,"p99Micros":779}
+{"client":"java","threads":8,"calls":400000,"perMinute":2479324,"p50Micros":156,"p95Micros":395,"p99Micros":807}

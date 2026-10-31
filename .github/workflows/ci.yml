@@ -1,0 +1,117 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check-names:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: ./scripts/check-names.sh
+
+  go:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        module: [engine, sidecar, controlplane, clients/go, gen/go]
+    defaults:
+      run:
+        working-directory: ${{ matrix.module }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.work
+          cache-dependency-path: "**/go.sum"
+      - name: gofmt
+        run: test -z "$(gofmt -l .)" || (gofmt -l . && exit 1)
+      - name: go vet
+        run: go vet ./...
+      - name: go test
+        run: go test -race -count=1 ./...
+
+  examples:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.work
+      - name: example service builds
+        working-directory: examples/go-service
+        run: GOWORK=off go vet .
+      - name: probe test client builds
+        working-directory: examples/probe
+        run: GOWORK=off go vet .
+      - name: compose file is valid
+        run: docker compose -f deploy/compose/docker-compose.yml config -q
+
+  python-client:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.work
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: stubs, install, unit test
+        working-directory: clients/python
+        run: |
+          pip install grpcio-tools pytest
+          ./scripts/gen.sh
+          pip install -e '.[dev]'
+      - name: test against a real sidecar
+        run: |
+          go build -o bin/ ./sidecar/cmd/gearbox-sidecar
+          GEARBOX_SOCKET=/tmp/gbx.sock GEARBOX_METRICS_ADDR=127.0.0.1:19600 bin/gearbox-sidecar --definitions-dir examples/definitions --allow-unsigned &
+          for i in $(seq 1 40); do curl -fs 127.0.0.1:19600/readyz && break; sleep 0.25; done
+          cd clients/python && GEARBOX_TEST_SIDECAR=unix:///tmp/gbx.sock pytest -q
+
+  e2e:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.work
+      - name: MongoDB + LocalStack S3 → server → S3 bundle → sidecar → service
+        run: scripts/integration/e2e.sh
+
+  ui:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - id: present
+        run: if [ -f ui/package.json ]; then echo "ui=true" >> "$GITHUB_OUTPUT"; fi
+      - if: steps.present.outputs.ui == 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - if: steps.present.outputs.ui == 'true'
+        working-directory: ui
+        run: |
+          if [ -f package-lock.json ]; then npm ci; else npm install; fi
+          npm run check
+          npm run test --if-present
+          npm run build
+
+  helm:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: azure/setup-helm@v4
+      - run: helm lint deploy/helm/gearbox-server deploy/helm/gearbox-sidecar
+      - run: helm template gearbox deploy/helm/gearbox-server > /dev/null
