@@ -18,9 +18,9 @@
   let admin = $derived(session.can('admin'));
   let open = $state(false);
   let url = $state('https://');
-  let events: string[] = $state(['release.published']);
-  let secret: string | null = $state(null);
-  let err: ApiError | null = $state(null);
+  let events = $state<string[]>(['release.published']);
+  let secret = $state<string | null>(null);
+  let err = $state<ApiError | null>(null);
 
   async function add(): Promise<void> {
     err = null;

@@ -6,7 +6,7 @@
   import Loading from '$lib/components/Loading.svelte';
   import { DEFAULT_ENV, href, lastApp } from '$lib/nav.svelte';
 
-  let error: unknown = $state(null);
+  let error = $state<unknown>(null);
 
   async function go(): Promise<void> {
     try {

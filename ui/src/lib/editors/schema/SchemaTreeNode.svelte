@@ -29,7 +29,7 @@
     return (isObj(cur) ? resolveRef(root, cur as JsonSchema) : undefined) ?? {};
   });
   let t = $derived(primaryType(node));
-  let props = $derived(isObj(node.properties) ? Object.entries(node.properties as Record<string, JsonSchema>) : []);
+  let propEntries = $derived(isObj(node.properties) ? Object.entries(node.properties as Record<string, JsonSchema>) : []);
   let req = $derived(Array.isArray(node.required) ? (node.required as string[]) : []);
   let items = $derived(t === 'array' && isObj(node.items) ? (node.items as JsonSchema) : null);
   let expandable = $derived(t === 'object' || !!items);
@@ -66,10 +66,10 @@
 {#if expandable && open}
   <div class="tree-children">
     {#if t === 'object'}
-      {#each props as [child], i (child)}
-        <SchemaTreeNode {root} path={[...path, 'properties', child]} name={child} required={req.includes(child)} {selected} {ops} {disabled} index={i} siblings={props.length} />
+      {#each propEntries as [child], i (child)}
+        <SchemaTreeNode {root} path={[...path, 'properties', child]} name={child} required={req.includes(child)} {selected} {ops} {disabled} index={i} siblings={propEntries.length} />
       {/each}
-      {#if props.length === 0}<p class="hint" style="padding:4px 8px">No properties. {#if !disabled}<button type="button" class="link-btn" onclick={() => ops.add(path)}>Add one</button>{/if}</p>{/if}
+      {#if propEntries.length === 0}<p class="hint" style="padding:4px 8px">No properties. {#if !disabled}<button type="button" class="link-btn" onclick={() => ops.add(path)}>Add one</button>{/if}</p>{/if}
     {:else if items}
       <SchemaTreeNode {root} path={[...path, 'items']} name="[ ] items" {selected} {ops} {disabled} />
     {/if}

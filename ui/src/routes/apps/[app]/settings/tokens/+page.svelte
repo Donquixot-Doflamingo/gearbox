@@ -9,7 +9,7 @@
   let label = $state('');
   let days = $state(90);
   let created: { id: string; token: string; expiresAt: string } | null = $state(null);
-  let err: ApiError | null = $state(null);
+  let err = $state<ApiError | null>(null);
   let busy = $state(false);
 
   async function create(): Promise<void> {

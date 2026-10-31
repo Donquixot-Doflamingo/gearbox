@@ -27,7 +27,7 @@
   const logs = new Paged<DecisionLogRecord>((cursor) =>
     api.searchDecisionLogs({ app, env, query: { decision: decision || undefined, version: version ? Number(version) : undefined, requestId: requestId || undefined, unitId: unitId || undefined, fallback: fallback || undefined, from: from ? new Date(from).toISOString() : undefined, to: to ? new Date(to).toISOString() : undefined, cursor, limit: 50 } }),
   );
-  let selId: string | null = $state(null);
+  let selId = $state<string | null>(null);
   let sel = $derived(logs.items.find((l) => l.requestId === selId) ?? logs.items[0]);
   let decisions = $derived(registry.list(app, 'decisions') ?? []);
 

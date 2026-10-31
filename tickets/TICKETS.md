@@ -58,20 +58,20 @@ Format and rules: [README.md](README.md). Areas: [Contracts](#contracts) · [Eng
 | GBX-065 | gearboxctl: login, push, pull | CLI | done |
 | GBX-066 | gearboxctl: validate, test, versions, change requests, releases | CLI | done |
 | GBX-067 | gearboxctl: bundle export, decide, keys | CLI | done |
-| GBX-070 | App shell, auth and typed client | UI | review |
-| GBX-071 | Schema registry screens | UI | review |
-| GBX-072 | Decisions list and graph editor | UI | review |
-| GBX-073 | Rules editor and condition builder | UI | review |
-| GBX-074 | Decision table editor | UI | review |
-| GBX-075 | Transform mapper | UI | review |
-| GBX-076 | Test console and test cases | UI | review |
-| GBX-077 | Segments and lookups screens | UI | review |
-| GBX-078 | Gates, experiments and layers screens | UI | review |
-| GBX-079 | Change requests and review | UI | review |
-| GBX-080 | Releases, rollout, rollback, kill switch | UI | review |
-| GBX-081 | Operations screens | UI | review |
-| GBX-082 | AI node editor and shadow report | UI | review |
-| GBX-083 | Settings screens | UI | review |
+| GBX-070 | App shell, auth and typed client | UI | done |
+| GBX-071 | Schema registry screens | UI | done |
+| GBX-072 | Decisions list and graph editor | UI | done |
+| GBX-073 | Rules editor and condition builder | UI | done |
+| GBX-074 | Decision table editor | UI | done |
+| GBX-075 | Transform mapper | UI | done |
+| GBX-076 | Test console and test cases | UI | done |
+| GBX-077 | Segments and lookups screens | UI | done |
+| GBX-078 | Gates, experiments and layers screens | UI | done |
+| GBX-079 | Change requests and review | UI | done |
+| GBX-080 | Releases, rollout, rollback, kill switch | UI | done |
+| GBX-081 | Operations screens | UI | done |
+| GBX-082 | AI node editor and shadow report | UI | done |
+| GBX-083 | Settings screens | UI | done |
 | GBX-084 | UI end-to-end and accessibility suite | UI | todo |
 | GBX-085 | Container images | Deploy | done |
 | GBX-086 | docker compose stack | Deploy | done |
@@ -444,85 +444,85 @@ Local validate/test with the engine (`--remote` option), `version cut`, `change 
 ## UI
 
 ### GBX-070 · App shell, auth and typed client
-**Status:** review · **Depends on:** GBX-004, GBX-046
+**Status:** done · **Depends on:** GBX-004, GBX-046
 SvelteKit 2 / Svelte 5 shell, sign-in, app and environment switcher in the URL, typed client from the OpenAPI file, CSRF header, problem display at fields.
 **Acceptance:**
 - Every route deep-links with app and environment; `svelte-check` clean.
 
 ### GBX-071 · Schema registry screens
-**Status:** review · **Depends on:** GBX-070, GBX-050
+**Status:** done · **Depends on:** GBX-070, GBX-050
 List, editor (nested objects, arrays, nullable, PII toggle), examples, compatibility check, usages, versions.
 **Acceptance:**
 - An author can register `lead_input` and cut v2 with a compatible change without YAML.
 
 ### GBX-072 · Decisions list and graph editor
-**Status:** review · **Depends on:** GBX-070, GBX-049
+**Status:** done · **Depends on:** GBX-070, GBX-049
 List with live versions and stats; graph canvas for nodes and edges (`next`, `onError`, switch cases), node inspector, live validation.
 **Acceptance:**
 - Validation problems highlight the node and field from the JSON pointer.
 
 ### GBX-073 · Rules editor and condition builder
-**Status:** review · **Depends on:** GBX-072
+**Status:** done · **Depends on:** GBX-072
 Rule list (priority, enable, rollout), condition builder for all leaves incl. segment and gate, Expr editor with autocomplete from `/meta/expr` and the input schema, `then` editor checked against the output schema.
 **Acceptance:**
 - The [01 §3](../docs/01-features.md#3-segment-conditions-static-dynamic-rollout) rule can be built without typing JSON.
 
 ### GBX-074 · Decision table editor
-**Status:** review · **Depends on:** GBX-072
+**Status:** done · **Depends on:** GBX-072
 Grid with cell syntax help, hit policy, CSV import/export.
 **Acceptance:**
 - Round-trip CSV export/import preserves the table.
 
 ### GBX-075 · Transform mapper
-**Status:** review · **Depends on:** GBX-072
+**Status:** done · **Depends on:** GBX-072
 Field list with Expr editors, defaults, drop, live input → output preview from a test case.
 **Acceptance:**
 - Preview updates on each edit with the server's evaluate result.
 
 ### GBX-076 · Test console and test cases
-**Status:** review · **Depends on:** GBX-051
+**Status:** done · **Depends on:** GBX-051
 Evaluate with input/ctx, per-node path with inputs/outputs; test case editor and runner with mismatches.
 **Acceptance:**
 - US-054 passes from the UI.
 
 ### GBX-077 · Segments and lookups screens
-**Status:** review · **Depends on:** GBX-052
+**Status:** done · **Depends on:** GBX-052
 Static upload, dynamic condition editor, rollout percent/salt, membership check; lookup rows upload and key preview.
 **Acceptance:**
 - A static segment upload of 100k members succeeds with progress and errors per line.
 
 ### GBX-078 · Gates, experiments and layers screens
-**Status:** review · **Depends on:** GBX-070, GBX-049
+**Status:** done · **Depends on:** GBX-070, GBX-049
 Gate rules with rollouts, experiment variants/weights/parameters/holdout/targeting/status, layer allocations.
 **Acceptance:**
 - Weights and layer shares validated in the form before save.
 
 ### GBX-079 · Change requests and review
-**Status:** review · **Depends on:** GBX-053
+**Status:** done · **Depends on:** GBX-053
 Open from versions (with rollout %), diff view, test results, approve/reject/comment/withdraw.
 **Acceptance:**
 - Self-approval is disabled with the reason when the policy forbids it.
 
 ### GBX-080 · Releases, rollout, rollback, kill switch
-**Status:** review · **Depends on:** GBX-054
+**Status:** done · **Depends on:** GBX-054
 Release history and manifest, rollout stepper, rollback to a generation, kill switch; confirm dialogs repeat the environment.
 **Acceptance:**
 - Playwright covers publish → 5% → 50% → 100% → rollback.
 
 ### GBX-081 · Operations screens
-**Status:** review · **Depends on:** GBX-057
+**Status:** done · **Depends on:** GBX-057
 Overview, fleet, decision log search with path trace, update log, exposure log, audit.
 **Acceptance:**
 - A request ID search opens the record with a "replay in console" action pre-filled with version and `now`.
 
 ### GBX-082 · AI node editor and shadow report
-**Status:** review · **Depends on:** GBX-073, GBX-057
+**Status:** done · **Depends on:** GBX-073, GBX-057
 Prompt, vars, response schema, mode, timeout, cache, budget; shadow report with matrix and disagreements.
 **Acceptance:**
 - `PII_IN_PROMPT` shown at the offending var.
 
 ### GBX-083 · Settings screens
-**Status:** review · **Depends on:** GBX-047, GBX-058
+**Status:** done · **Depends on:** GBX-047, GBX-058
 Members and roles, apps, environments and policies, credentials (secret shown once), webhooks, personal tokens.
 **Acceptance:**
 - Credential secret is displayed once with a copy button and never again.
@@ -706,12 +706,12 @@ Benchmarks with `-count=10` on a dedicated runner compared by `benchstat`; fail 
 ### GBX-120 · Generate go.sum on a normal machine
 Run `go mod tidy` in each module (`engine`, `sidecar`, `controlplane`, `clients/go`, `gen/go`, `examples/go-service`) with the default Go proxy and commit the go.sum files. The build sandbox could not reach the proxy.
 **Acceptance:** `go build ./...` and `go test ./...` pass in every module without `scripts/dev/restricted-env.sh`.
-**Status:** todo · **Depends on:** –
+**Status:** done · **Depends on:** –
 
 ### GBX-121 · First UI verification pass
 `cd ui && npm install && npm run check && npm test && npm run build`, then `npm run dev:mock` and click through every screen. Fix svelte-check type and a11y findings.
 **Acceptance:** check, test and build pass; every screen works in mock mode and against `gearbox-server serve --seed`.
-**Status:** todo · **Depends on:** GBX-070…GBX-083
+**Status:** done · **Depends on:** GBX-070…GBX-083
 
 ### GBX-122 · Enforce AI cache and budget
 AI node `cache` (key = hash of rendered prompt, model, schema) and app-wide `budget.maxCallsPerMinute` are parsed but not enforced; shadow AI answers go to metrics only, not into the decision record's `ai` list (needed by the shadow report).

@@ -49,9 +49,9 @@
   // preview via evaluate (runs the saved draft)
   const tests = $derived(ed.spec.tests ?? []);
   let previewSource = $state('');
-  let previewInput: unknown = $state(undefined);
-  let previewStep: PathStep | null = $state(null);
-  let previewError: unknown = $state(null);
+  let previewInput = $state<unknown>(undefined);
+  let previewStep = $state<PathStep | null>(null);
+  let previewError = $state<unknown>(null);
   let previewNote = $state('');
   let previewing = $state(false);
 

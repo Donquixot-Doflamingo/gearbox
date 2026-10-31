@@ -9,7 +9,7 @@
   let { node = $bindable(), index, problems, decision }: { node: Node; index: number; problems: ProblemSource; decision: string } = $props();
   let ai = $derived(node as AINode);
   let base = $derived(`/nodes/${index}`);
-  let userEl: HTMLTextAreaElement | undefined = $state();
+  let userEl = $state<HTMLTextAreaElement | undefined>();
   let newVar = $state('');
 
   $effect(() => {

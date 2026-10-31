@@ -20,6 +20,8 @@
   import { toast } from '$lib/stores/toast.svelte';
 
   let { app, name }: { app: string; name: string } = $props();
+  // Routes remount this editor per resource ({#key}), so reading the props once is intended.
+  // svelte-ignore state_referenced_locally
   const ed = new DraftEditor<LookupSpec>(app, 'lookups', name);
   void ed.load();
   $effect(() => {
@@ -39,14 +41,14 @@
   });
 
   let key = $state('');
-  let keyResult: LookupRow | null | undefined = $state(undefined);
+  let keyResult = $state<LookupRow | null | undefined>(undefined);
   async function checkKey(): Promise<void> {
     const r = await api.listLookupRows({ app, name, query: { key } });
     keyResult = r.items[0] ?? null;
   }
 
   let uploading = $state(false);
-  let uploadError: unknown = $state(null);
+  let uploadError = $state<unknown>(null);
   let paste = $state('');
   async function upload(body: string | { rows: LookupRow[] }): Promise<void> {
     uploading = true;

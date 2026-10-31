@@ -22,6 +22,8 @@
   import TestConsole from './TestConsole.svelte';
 
   let { app, name }: { app: string; name: string } = $props();
+  // Routes remount this editor per resource ({#key}), so reading the props once is intended.
+  // svelte-ignore state_referenced_locally
 
   const ed = new DraftEditor<DecisionSpec>(app, 'decisions', name);
   void ed.load();
@@ -41,8 +43,8 @@
     ['usages', 'Used by'],
   ] as const;
   let tab = $derived(qp('tab') ?? 'graph');
-  let selected: string | null = $state(qp('node'));
-  let pathIds: string[] = $state([]);
+  let selected = $state<string | null>(qp('node'));
+  let pathIds = $state<string[]>([]);
   let canEdit = $derived(session.can('edit'));
 
   // keep ?node= in the URL so a selection is shareable

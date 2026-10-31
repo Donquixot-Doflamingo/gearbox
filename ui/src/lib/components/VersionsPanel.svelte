@@ -37,8 +37,9 @@
   let message = $state('');
   let allowBreaking = $state(false);
   let cutting = $state(false);
-  let cutError: ApiError | null = $state(null);
-  let compat: { compatible: boolean; changes: { path: string; kind: string; breaking: boolean }[] } | null = $state(null);
+  let cutError = $state<ApiError | null>(null);
+  type Compat = { compatible: boolean; changes: { path: string; kind: string; breaking: boolean }[] };
+  let compat = $state<Compat | null>(null);
   let checking = $state(false);
 
   async function checkCompat(): Promise<void> {

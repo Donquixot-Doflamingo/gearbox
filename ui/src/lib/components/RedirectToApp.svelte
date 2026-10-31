@@ -8,7 +8,7 @@
   import Loading from './Loading.svelte';
 
   let { path }: { path: string } = $props();
-  let error: unknown = $state(null);
+  let error = $state<unknown>(null);
 
   async function go(): Promise<void> {
     try {

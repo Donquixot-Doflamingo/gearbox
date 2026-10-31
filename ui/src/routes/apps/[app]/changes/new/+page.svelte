@@ -21,9 +21,9 @@
   let title = $state('');
   let description = $state('');
   const KINDS: ResourceKind[] = ['decisions', 'schemas', 'segments', 'lookups', 'gates', 'experiments', 'layers'];
-  let items: Item[] = $state([]);
+  let items = $state<Item[]>([]);
   let busy = $state(false);
-  let err: ApiError | null = $state(null);
+  let err = $state<ApiError | null>(null);
 
   $effect(() => {
     const k = qp('kind') as ResourceKind | null, n = qp('name'), v = qp('version');

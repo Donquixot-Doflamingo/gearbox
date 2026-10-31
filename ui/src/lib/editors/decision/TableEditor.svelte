@@ -70,7 +70,7 @@
   }
 
   // try an input
-  let trial: Record<string, string> = $state({});
+  let trial = $state<Record<string, string>>({});
   function trialValue(name: string): unknown {
     const raw = trial[name] ?? '';
     if (raw.trim() === '') return undefined;

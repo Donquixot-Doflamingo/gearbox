@@ -8,7 +8,7 @@
   import { toast, toastError } from '$lib/stores/toast.svelte';
 
   let open = $state(false);
-  let root: HTMLDivElement | undefined = $state();
+  let root = $state<HTMLDivElement | undefined>();
   let mockMembers: { id: string; name?: string; email: string; role: string }[] = $state([]);
 
   $effect(() => {

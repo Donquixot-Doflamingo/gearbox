@@ -16,15 +16,15 @@
 
   let { app, ed, onpath }: { app: string; ed: DraftEditor<DecisionSpec>; onpath: (ids: string[]) => void } = $props();
 
-  let input: unknown = $state(undefined);
+  let input = $state<unknown>(undefined);
   let now = $state('2026-10-30T10:00:00Z');
   let unit = $state('L-1');
   let env = $state(currentEnv() === 'prod' ? 'dev' : currentEnv());
   let source = $state('draft');
   let version = $state(0);
   let skipAI = $state(true);
-  let result: EvaluateResult | null = $state(null);
-  let error: unknown = $state(null);
+  let result = $state<EvaluateResult | null>(null);
+  let error = $state<unknown>(null);
   let busy = $state(false);
 
   $effect(() => {

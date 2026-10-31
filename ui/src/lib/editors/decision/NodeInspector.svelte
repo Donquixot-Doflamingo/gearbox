@@ -30,7 +30,7 @@
   let base = $derived(`/nodes/${index}`);
 
   let idDraft = $state('');
-  let idError: string | null = $state(null);
+  let idError = $state<string | null>(null);
   $effect(() => {
     idDraft = id;
     idError = null;

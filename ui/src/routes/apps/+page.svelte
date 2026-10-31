@@ -25,7 +25,7 @@
   let description = $state('');
   let owners = $state('');
   let busy = $state(false);
-  let err: ApiError | null = $state(null);
+  let err = $state<ApiError | null>(null);
 
   async function create(): Promise<void> {
     busy = true;

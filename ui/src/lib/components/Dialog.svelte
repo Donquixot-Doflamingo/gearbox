@@ -11,7 +11,7 @@
     actions,
   }: { open?: boolean; title: string; wide?: boolean; onclose?: () => void; children: Snippet; actions?: Snippet } = $props();
 
-  let box: HTMLDivElement | undefined = $state();
+  let box = $state<HTMLDivElement | undefined>();
   let opener: HTMLElement | null = null;
   const id = `dlg-${Math.random().toString(36).slice(2, 8)}`;
 
@@ -58,7 +58,7 @@
 
 {#if open}
   <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
-  <div class="scrim" onclick={(e) => { if (e.target === e.currentTarget) close(); }}>
+  <div class="scrim" role="presentation" onclick={(e) => { if (e.target === e.currentTarget) close(); }}>
     <div class="dialog" class:wide bind:this={box} role="dialog" aria-modal="true" aria-labelledby={id} tabindex="-1" {onkeydown}>
       <h2 id={id}>{title}</h2>
       {@render children()}

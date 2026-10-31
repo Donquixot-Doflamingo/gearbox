@@ -28,7 +28,7 @@
   let newType = $state<'static' | 'dynamic' | 'rollout'>('static');
   let keyType = $state<'string' | 'number'>('string');
   let pii = $state(false);
-  let attrs: SchemaRef | undefined = $state();
+  let attrs = $state<SchemaRef | undefined>();
   let percent = $state(10);
 
   function buildSpec(): SegmentSpec {

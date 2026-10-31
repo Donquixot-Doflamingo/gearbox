@@ -17,7 +17,7 @@ Everything in the contracts is built in one pass by four parallel workstreams an
 | Sidecar | Complete except OTLP export | End-to-end test (fake control plane → sync → Decide over Unix socket → swap); real run against `gearbox-server` |
 | Go client | Complete | Tests against an in-process sidecar |
 | Control plane + `gearboxctl` | All 67 API operations, memory / file / MongoDB stores, filesystem / S3 object stores, publishing, approvals, rollouts, rollback, kill switch, SSE feed, OIDC + dev auth | Every response checked against the OpenAPI spec; seeded server answers `lead_routing`; rule without schema → `422 SCHEMA_REQUIRED` |
-| Admin UI (SvelteKit) | Every screen, mock mode with sample data | `.ts` type-checked and 58 unit tests; **not yet compiled** (npm was unavailable) |
+| Admin UI (SvelteKit) | Every screen, mock mode with sample data | `svelte-check` 0 errors / 0 warnings, 58 Vitest tests, `vite build` OK |
 | Docs, tickets, deploy | 4 docs, 98 tickets, Dockerfiles, compose, Helm | Charts rendered, compose config valid |
 | **End to end** | `make e2e`: MongoDB 7 + LocalStack S3 in Docker → server (dev auth, no sign-in) → signed bundle in S3 → sidecar → example Go service; publish, swap, rollback, logs, outages | **18/18 checks pass**; MongoDB and S3 integration suites pass |
 
@@ -31,12 +31,10 @@ Everything in the contracts is built in one pass by four parallel workstreams an
 | `lead_routing` graph | 9.3 µs | – |
 | Full call: client → Unix socket → sidecar | ≈ 126 µs | p99 < 1 ms |
 
-### First steps on a normal machine
+### First steps
 
-1. `go mod tidy` in each Go module (go.sum could not be generated in the build sandbox) — ticket GBX-120.
-2. `cd ui && npm install && npm run check && npm run build` and fix what svelte-check reports — GBX-121.
-3. Fill in the Integration Hub contract in `contracts/openapi/integration-hub-ai.yaml` (placeholder).
-4. Review `contracts/CHANGES-REQUESTED.md` (small contract fixes the workstreams asked for) — GBX-002.
+1. Fill in the Integration Hub contract in `contracts/openapi/integration-hub-ai.yaml` (placeholder).
+2. Review `contracts/CHANGES-REQUESTED.md` (small contract fixes the workstreams asked for) — GBX-002.
 
 Known gaps: OpenTelemetry export (GBX-123), AI cache/budget enforcement and shadow answers in decision logs (GBX-122), AI `precompute` mode, OIDC sign-in not exercised (local runs use `GEARBOX_AUTH_MODE=dev`, which skips sign-in).
 

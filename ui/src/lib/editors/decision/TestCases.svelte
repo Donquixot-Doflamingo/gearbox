@@ -12,10 +12,10 @@
   let { app, ed }: { app: string; ed: DraftEditor<DecisionSpec> } = $props();
 
   let env = $state(currentEnv() === 'prod' ? 'dev' : currentEnv());
-  let result: TestRunResult | null = $state(null);
-  let error: unknown = $state(null);
+  let result = $state<TestRunResult | null>(null);
+  let error = $state<unknown>(null);
   let busy = $state(false);
-  let openIdx: number | null = $state(null);
+  let openIdx = $state<number | null>(null);
 
   $effect(() => {
     if (!ed.spec.tests) ed.spec.tests = [];

@@ -11,11 +11,12 @@
     onpick,
   }: { value: string; fields: FieldInfo[] | null; id?: string; disabled?: boolean; onpick: (path: string) => void } = $props();
 
-  const uid = id ?? `fp-${Math.random().toString(36).slice(2, 8)}`;
+  const fallbackId = `fp-${Math.random().toString(36).slice(2, 8)}`;
+  let uid = $derived(id ?? fallbackId);
   let open = $state(false);
   let q = $state('');
   let active = $state(0);
-  let root: HTMLDivElement | undefined = $state();
+  let root = $state<HTMLDivElement | undefined>();
   let current = $derived(fields?.find((f) => f.path === value));
   let shown = $derived((fields ?? []).filter((f) => !q || f.path.toLowerCase().includes(q.toLowerCase())));
   let selectable = (f: FieldInfo) => !f.inArray;

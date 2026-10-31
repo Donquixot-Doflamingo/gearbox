@@ -30,7 +30,7 @@ describe('request', () => {
     const f = vi.fn(async () => res(200, { items: [] }));
     configureApi({ baseUrl: '/api/v1', fetch: f as unknown as typeof fetch });
     await expect(request(req())).resolves.toEqual({ items: [] });
-    const [url, init] = f.mock.calls[0] as [string, RequestInit];
+    const [url, init] = f.mock.calls[0] as unknown as [string, RequestInit];
     expect(url).toBe('/api/v1/apps');
     expect(init.credentials).toBe('include');
   });

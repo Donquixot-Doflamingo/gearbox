@@ -23,6 +23,8 @@
   import { session } from '$lib/stores/session.svelte';
 
   let { app, name }: { app: string; name: string } = $props();
+  // Routes remount this editor per resource ({#key}), so reading the props once is intended.
+  // svelte-ignore state_referenced_locally
   const ed = new DraftEditor<ExperimentSpec>(app, 'experiments', name);
   void ed.load();
   $effect(() => {
@@ -53,7 +55,7 @@
       paramErr[i] = 'Not valid JSON';
     }
   }
-  let paramErr: Record<number, string> = $state({});
+  let paramErr = $state<Record<number, string>>({});
 
   async function stop(): Promise<void> {
     const r = await confirmAction({ title: `Stop ${name}?`, body: [`Every unit gets the ${x.stoppedVariant ?? x.variants[0]?.name} parameters once a version with status stopped is released. Logged exposures are kept.`, 'This changes the draft; save, cut a version and release it through a change request.'], ok: 'Mark as stopped', danger: false });
@@ -62,8 +64,8 @@
 
   // assignment check (runtime API against the live bundle)
   let unit = $state('L-1029384');
-  let assign: VariantResult | null = $state(null);
-  let assignErr: unknown = $state(null);
+  let assign = $state<VariantResult | null>(null);
+  let assignErr = $state<unknown>(null);
   async function check(): Promise<void> {
     assignErr = null;
     try {
