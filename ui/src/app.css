@@ -369,6 +369,10 @@ fieldset:disabled .gated { opacity: 0.45; pointer-events: none; user-select: non
 .tree-row.sel { background: var(--accent-soft); border-color: var(--accent); }
 .tree-name { display: flex; align-items: center; gap: 6px; min-width: 0; }
 .tree-name button.pick { all: unset; cursor: pointer; display: flex; gap: 8px; align-items: center; min-width: 0; font: 500 13px/1.3 var(--f-mono); }
+.tree-name button.pick { overflow: hidden; }
+.tree-name button.pick > span { white-space: nowrap; }
+.tree-name button.pick .t { overflow: hidden; text-overflow: ellipsis; min-width: 0; flex-shrink: 1; }
+.tree-row > .row-sm { flex-wrap: nowrap; gap: 2px; }
 .tree-name button.pick:focus-visible { outline: 2px solid var(--accent); border-radius: 4px; }
 .tree-name .t { font: 400 12px/1 var(--f-mono); color: var(--muted); }
 .tree-name .req { color: var(--crit); font-weight: 700; }
