@@ -1,0 +1,34 @@
+# syntax=docker/dockerfile:1.7
+# gearbox-sidecar: multi-stage Go build → distroless static, non-root.
+# Build from the repository root:
+#   docker build -f deploy/docker/Dockerfile.sidecar -t gearbox-sidecar:dev .
+# In a network-restricted sandbox add: --build-arg GEARBOX_RESTRICTED=1
+ARG GO_VERSION=1.24
+
+FROM golang:${GO_VERSION}-bookworm AS build
+ARG VERSION=dev
+ARG GEARBOX_RESTRICTED=0
+ARG TARGETOS=linux
+ARG TARGETARCH=amd64
+WORKDIR /src
+COPY . .
+RUN --mount=type=cache,target=/go/pkg/mod --mount=type=cache,target=/root/.cache/go-build \
+    set -e; \
+    if [ "$GEARBOX_RESTRICTED" = "1" ]; then . scripts/dev/restricted-env.sh; fi; \
+    CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH \
+      go build -trimpath -ldflags "-s -w -X main.version=${VERSION}" \
+      -o /out/gearbox-sidecar ./sidecar/cmd/gearbox-sidecar; \
+    mkdir -p /out/var/run/gearbox /out/var/cache/gearbox
+
+FROM gcr.io/distroless/static-debian12:nonroot
+COPY --from=build /out/gearbox-sidecar /gearbox-sidecar
+# Socket and cache directories owned by nonroot so named volumes inherit it.
+COPY --from=build --chown=65532:65532 /out/var/run/gearbox /var/run/gearbox
+COPY --from=build --chown=65532:65532 /out/var/cache/gearbox /var/cache/gearbox
+ENV GEARBOX_SOCKET=/var/run/gearbox/engine.sock \
+    GEARBOX_CACHE_DIR=/var/cache/gearbox \
+    GEARBOX_METRICS_ADDR=:9464
+USER 65532:65532
+EXPOSE 9464
+HEALTHCHECK --interval=5s --timeout=2s --retries=30 CMD ["/gearbox-sidecar", "healthcheck"]
+ENTRYPOINT ["/gearbox-sidecar"]

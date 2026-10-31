@@ -1,0 +1,11 @@
+{{- if .Values.trustedKeys.create }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Values.trustedKeys.name }}
+  labels:
+    {{- include "gearbox-server.labels" . | nindent 4 }}
+data:
+  keys.txt: |
+    {{- required "trustedKeys.keys is required when trustedKeys.create is true" .Values.trustedKeys.keys | nindent 4 }}
+{{- end }}

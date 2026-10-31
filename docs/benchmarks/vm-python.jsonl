@@ -1,0 +1,10 @@
+{"client": "python", "threads": 1, "calls": 10000, "perMinute": 403715, "p50Micros": 147, "p95Micros": 172, "p99Micros": 192, "meanMicros": 148}
+{"client": "python", "threads": 4, "calls": 10000, "perMinute": 654488, "p50Micros": 354, "p95Micros": 565, "p99Micros": 703, "meanMicros": 365}
+{"client": "python", "threads": 8, "calls": 10000, "perMinute": 638674, "p50Micros": 702, "p95Micros": 1285, "p99Micros": 1677, "meanMicros": 747}
+{"client": "python", "threads": 1, "calls": 10000, "perMinute": 430668, "p50Micros": 136, "p95Micros": 165, "p99Micros": 199, "meanMicros": 139}
+{"client": "python", "threads": 4, "calls": 10000, "perMinute": 723214, "p50Micros": 320, "p95Micros": 513, "p99Micros": 647, "meanMicros": 331}
+{"client": "python", "threads": 8, "calls": 10000, "perMinute": 678698, "p50Micros": 657, "p95Micros": 1223, "p99Micros": 1559, "meanMicros": 704}
+{"client": "python", "threads": 1, "calls": 10000, "perMinute": 429931, "p50Micros": 138, "p95Micros": 163, "p99Micros": 188, "meanMicros": 139}
+{"client": "python", "threads": 4, "calls": 10000, "perMinute": 709696, "p50Micros": 325, "p95Micros": 529, "p99Micros": 663, "meanMicros": 338}
+{"client": "python", "threads": 8, "calls": 10000, "perMinute": 667916, "p50Micros": 672, "p95Micros": 1220, "p99Micros": 1573, "meanMicros": 716}
+{"client": "python", "threads": 4, "calls": 80000, "perMinute": 677081, "p50Micros": 342, "p95Micros": 547, "p99Micros": 695, "meanMicros": 354}

@@ -1,0 +1,13 @@
+kind: schemas
+name: routing_output
+version: 1
+description: Response of lead_routing
+spec:
+  jsonSchema:
+    type: object
+    required: [route]
+    properties:
+      route: { enum: [fast_track, standard, reject, manual_review] }
+      reason: { type: string }
+  examples:
+    - { route: fast_track, reason: fast_lane }

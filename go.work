@@ -1,0 +1,11 @@
+go 1.24
+
+use (
+	./engine
+	./sidecar
+	./controlplane
+	./clients/go
+	./gen/go
+	./examples/go-service
+	./examples/probe
+)

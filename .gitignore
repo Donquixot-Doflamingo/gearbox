@@ -1,0 +1,17 @@
+.gowork-mirrors/
+go.work.sum
+/bin/
+*.test
+*.out
+coverage.*
+node_modules/
+ui/.svelte-kit/
+ui/build/
+.env
+.data/
+clients/python/gen/
+clients/python/*.egg-info/
+__pycache__/
+.pytest_cache/
+target/
+examples/go-service/go-service

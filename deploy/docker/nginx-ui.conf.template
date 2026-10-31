@@ -1,0 +1,12 @@
+# Rendered by the nginx image's envsubst step at start.
+server {
+  listen 8080;
+  root /usr/share/nginx/html;
+
+  location /api/  { proxy_pass ${GEARBOX_API_UPSTREAM}; proxy_set_header Host $host; proxy_buffering off; }
+  location /auth/ { proxy_pass ${GEARBOX_API_UPSTREAM}; proxy_set_header Host $host; }
+
+  location / {
+    try_files $uri $uri/ /index.html;   # SPA fallback (adapter-static)
+  }
+}

@@ -1,0 +1,6 @@
+apiVersion: v2
+name: gearbox-sidecar
+description: Library chart that renders the Gearbox sidecar (native sidecar container, volumes, pod settings) into a service's pod spec.
+type: library
+version: 0.1.0
+appVersion: "1.0.0"

@@ -1,0 +1,3 @@
+{"calls":123234,"client":"go","concurrency":1,"errors":0,"maxMicros":2456,"p50Micros":76,"p95Micros":103,"p99Micros":213,"perMinute":739333,"perSecond":12322,"seconds":10.000950713}
+{"calls":332497,"client":"go","concurrency":4,"errors":0,"maxMicros":1941,"p50Micros":112,"p95Micros":195,"p99Micros":312,"perMinute":1993718,"perSecond":33228,"seconds":10.006339088}
+{"calls":519783,"client":"go","concurrency":8,"errors":0,"maxMicros":3170,"p50Micros":143,"p95Micros":246,"p99Micros":371,"perMinute":3115805,"perSecond":51930,"seconds":10.009282463}
