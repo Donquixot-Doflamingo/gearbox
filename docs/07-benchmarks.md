@@ -102,7 +102,7 @@ These runs use the filesystem object store. With MongoDB and LocalStack S3 in `m
 | 1 | 1.1 s (this version of the script also included a fixed 1 s wait for a screenshot, so the true time was lower) |
 | 2 | 1.41 s (polling starts immediately after the click) |
 
-On the VM run with all three services (MongoDB store, 1-second ticker), a change published at 10:31:18 showed in Go, Python and Java on the 10:31:20 tick. The unblock published at 10:31:30 showed by 10:31:33.
+On the VM run with all three services (MongoDB store, 1-second ticker), Go, Python and Java changed on the same tick. A block published at 11:03:39 showed at 11:03:41, and the unblock published at 11:03:44 showed at 11:03:45 ([transcript](06-setup-and-examples-guide.md#start-the-live-demo)).
 
 ## 5. Python, Java and Go clients compared (second machine)
 
