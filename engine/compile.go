@@ -419,9 +419,19 @@ func decodeAttrs(raw json.RawMessage) (any, error) {
 	}
 	var v any
 	if err := json.Unmarshal(raw, &v); err != nil {
-		return nil, fmt.Errorf("attributes are not valid JSON: %w", err)
+		return nil, &Error{Reason: "INVALID_ARGUMENT", Message: "attributes are not valid JSON: " + err.Error()}
 	}
 	return v, nil
+}
+
+func evalErr(err error) error {
+	if err == nil {
+		return nil
+	}
+	if _, ok := err.(*Error); ok {
+		return err
+	}
+	return &Error{Reason: "NODE_ERROR", Message: err.Error()}
 }
 
 func (c *compiled) apiGate(name, unit string, attributes json.RawMessage) (GateResult, error) {
@@ -429,9 +439,13 @@ func (c *compiled) apiGate(name, unit string, attributes json.RawMessage) (GateR
 	if err != nil {
 		return GateResult{}, err
 	}
+	if c.gates[name] == nil {
+		return GateResult{}, &Error{Reason: "GATE_NOT_FOUND", Message: fmt.Sprintf("gate %q is not in the active bundle", name)}
+	}
 	r := c.getRun(bgCtx, time.Now(), unit, "")
 	defer c.putRun(r)
-	return c.checkGate(r, name, unit, attrs)
+	res, err := c.checkGate(r, name, unit, attrs)
+	return res, evalErr(err)
 }
 
 func (c *compiled) apiVariant(name, unit string, attributes json.RawMessage) (VariantResult, error) {
@@ -441,17 +455,18 @@ func (c *compiled) apiVariant(name, unit string, attributes json.RawMessage) (Va
 	}
 	e := c.experiments[name]
 	if e == nil {
-		return VariantResult{}, fmt.Errorf("experiment %q is not in the bundle", name)
+		return VariantResult{}, &Error{Reason: "EXPERIMENT_NOT_FOUND", Message: fmt.Sprintf("experiment %q is not in the active bundle", name)}
 	}
 	r := c.getRun(bgCtx, time.Now(), unit, "")
 	defer c.putRun(r)
-	return e.assign(r, unit, attrs)
+	res, err := e.assign(r, unit, attrs)
+	return res, evalErr(err)
 }
 
 func (c *compiled) apiSegment(name, key, unit string, attributes json.RawMessage) (bool, string, error) {
 	s := c.segments[name]
 	if s == nil {
-		return false, "", fmt.Errorf("segment %q is not in the bundle", name)
+		return false, "", &Error{Reason: "SEGMENT_NOT_FOUND", Message: fmt.Sprintf("segment %q is not in the active bundle", name)}
 	}
 	attrs, err := decodeAttrs(attributes)
 	if err != nil {
@@ -463,7 +478,8 @@ func (c *compiled) apiSegment(name, key, unit string, attributes json.RawMessage
 	if s.typ == "rollout" && key == "" {
 		k = unit
 	}
-	return s.member(r, k, attrs)
+	m, why, err := s.member(r, k, attrs)
+	return m, why, evalErr(err)
 }
 
 var bgCtx = context.Background()

@@ -334,6 +334,7 @@ func (a *App) heartbeat() syncer.Heartbeat {
 	p99, cpm, fbr := a.Server.Stats()
 	hb := syncer.Heartbeat{ID: a.Cfg.SidecarID, Node: a.Cfg.Node, SidecarVersion: server.Version, EngineVersion: engine.Version, Generation: a.State.Generation(), LastError: a.State.LastError(), P99Micros: p99, CallsPerMinute: cpm, FallbackRate: fbr}
 	if t := a.State.LastSync(); !t.IsZero() {
+		t = t.UTC()
 		hb.LastSyncAt = &t
 	}
 	return hb
