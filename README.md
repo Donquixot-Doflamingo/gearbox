@@ -7,6 +7,38 @@ Gearbox is a low-latency decision engine. Teams author **decisions** — rule se
                                         (control plane)                         (in every pod)
 ```
 
+## Status (v1 build, 2026-10-31)
+
+Everything in the contracts is built in one pass by four parallel workstreams and merged on this branch.
+
+| Part | State | Verified here |
+|---|---|---|
+| Engine | Complete: schema registry rules, JSON Schema subset, 35 operators, segment / gate / variant / Expr conditions, all node types, rollouts, dependency hash, tests, cost and PII checks, signed bundles | `go test -race` green (189 runs + fuzz); old service's bucketing fixtures pass |
+| Sidecar | Complete except OTLP export | End-to-end test (fake control plane → sync → Decide over Unix socket → swap); real run against `gearbox-server` |
+| Go client | Complete | Tests against an in-process sidecar |
+| Control plane + `gearboxctl` | All 67 API operations, memory / file / MongoDB stores, filesystem / S3 object stores, publishing, approvals, rollouts, rollback, kill switch, SSE feed, OIDC + dev auth | Every response checked against the OpenAPI spec; seeded server answers `lead_routing`; rule without schema → `422 SCHEMA_REQUIRED` |
+| Admin UI (SvelteKit) | Every screen, mock mode with sample data | `.ts` type-checked and 58 unit tests; **not yet compiled** (npm was unavailable) |
+| Docs, tickets, deploy | 4 docs, 98 tickets, Dockerfiles, compose, Helm | Charts rendered, compose config valid |
+
+### Measured performance (2 vCPU, JSON decode excluded)
+
+| Benchmark | Result | Target |
+|---|---|---|
+| One 7-condition rule | 1.28 µs | ≤ 2 µs |
+| 12-field transform | 11.0 µs | ≤ 25 µs |
+| 50-rule first match | 3.56 µs | ≤ 30 µs |
+| `lead_routing` graph | 9.3 µs | – |
+| Full call: client → Unix socket → sidecar | ≈ 126 µs | p99 < 1 ms |
+
+### First steps on a normal machine
+
+1. `go mod tidy` in each Go module (go.sum could not be generated in the build sandbox) — ticket GBX-120.
+2. `cd ui && npm install && npm run check && npm run build` and fix what svelte-check reports — GBX-121.
+3. Fill in the Integration Hub contract in `contracts/openapi/integration-hub-ai.yaml` (placeholder).
+4. Review `contracts/CHANGES-REQUESTED.md` (small contract fixes the workstreams asked for) — GBX-002.
+
+Known gaps: OpenTelemetry export (GBX-123), AI cache/budget enforcement and shadow answers in decision logs (GBX-122), AI `precompute` mode, MongoDB / S3 / OIDC not exercised against real services yet.
+
 ## Repository map
 
 | Path | What | Owner branch |
