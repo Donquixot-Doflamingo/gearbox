@@ -118,7 +118,20 @@ time     gen   | go :8081                             | python :8082            
 10:43:11 2     | reject/city_not_served lead_routing@1 | -                                    | -
 ```
 
-On the Linux VM, all three services ran against MongoDB. "Block Indore" was published at 10:31:18, and the Go, Python and Java services all answered `reject` on the ticker line at 10:31:20. "Unblock" was published at 10:31:30, and all three flipped back by 10:31:33. The ticker samples once a second, so these times have one-second resolution.
+With all three services built (Linux arm64 VM, MongoDB store, `scripts/demo/change.sh` in a second terminal), copied from the run:
+
+```
+11:03:39 published generation 2: blocked_cities v2 (block Indore)
+11:03:44 published generation 3: blocked_cities v3 (unblock Indore)
+time     gen   | go :8081                             | python :8082                         | java :8083
+11:03:38 1     | standard/default lead_routing@1      | standard/default lead_routing@1      | standard/default lead_routing@1
+11:03:39 1     | standard/default lead_routing@1      | standard/default lead_routing@1      | standard/default lead_routing@1
+11:03:41 2     | reject/city_not_served lead_routing@1 | reject/city_not_served lead_routing@1 | reject/city_not_served lead_routing@1
+11:03:44 2     | reject/city_not_served lead_routing@1 | reject/city_not_served lead_routing@1 | reject/city_not_served lead_routing@1
+11:03:45 3     | standard/default lead_routing@1      | standard/default lead_routing@1      | standard/default lead_routing@1
+```
+
+The ticker samples once a second, so these times have one-second resolution.
 
 `gen` is the bundle generation the sidecar is serving. If Python or Java are not built, the script skips them and says so.
 
