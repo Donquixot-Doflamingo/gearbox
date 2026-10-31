@@ -71,7 +71,7 @@ if [ -f ui/package.json ]; then
   (
     cd ui
     [ -d node_modules ] || npm install
-    GEARBOX_API_URL=http://localhost:8080 exec npm run dev -- --port 5173
+    GEARBOX_PROXY=http://localhost:8080 exec npm run dev -- --port 5173
   ) &
   pids+=($!)
 else

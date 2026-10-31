@@ -15,13 +15,129 @@ gearbox-sidecar version
 
 ## How it works
 
+The sidecar holds one active `engine.Snapshot` behind an `atomic.Pointer`.
+Requests read it without locks; a background loop replaces it when the control
+plane publishes a new generation. A bundle becomes active only after it has
+been verified, compiled and has passed all its test cases; otherwise the
+previous one keeps serving.
+
+### Sync and swap
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant CP as Control plane
+    participant SY as syncer
+    participant OS as Object store: S3 presigned or signed file URL
+    participant LD as loader
+    participant ST as state (atomic pointer)
+    participant DC as disk cache
+    participant LG as update log
+
+    Note over SY: start: load disk cache, then GEARBOX_FALLBACK_BUNDLE if newer
+    SY->>CP: GET /sidecar/v1/watch (SSE)
+    CP-->>SY: generation event (or poll timer, GEARBOX_POLL_INTERVAL)
+    SY->>CP: GET /sidecar/v1/head, If-None-Match + have=
+    alt 304 or same generation
+        CP-->>SY: not modified
+    else newer generation
+        CP-->>SY: generation, envelope URL + sha256, missing blob URLs
+        Note over SY: wait random 0..GEARBOX_FETCH_JITTER
+        SY->>OS: GET envelope (no Authorization header)
+        OS-->>SY: envelope bytes
+        SY->>SY: envelope sha256 matches head, Ed25519 signature valid
+        SY->>OS: GET missing blobs only
+        OS-->>SY: blob bytes
+        SY->>SY: each blob sha256, total size within GEARBOX_MAX_BUNDLE_MB
+        SY->>LD: Install
+        LD->>LD: verify signature again, generation newer, app and env match
+        LD->>LD: bundle.Open: engine version, hashes, sizes, decompressed cap
+        LD->>LD: engine.Compile
+        LD->>LD: RunTests (all test cases)
+        alt any check fails
+            SY->>LG: result kept_previous + error
+            Note over ST: previous snapshot keeps serving
+        else all pass
+            LD->>ST: atomic swap
+            LD->>DC: write bundle (temp file, fsync, rename)
+            LD->>LG: update record (from, to generation, changes)
+        end
+    end
+```
+
+### Request path
+
+```mermaid
+flowchart LR
+    C["client: Go, Python, Java<br/>deadline + local fallback"] -->|"gRPC over Unix socket<br/>GEARBOX_SOCKET"| S["internal/server<br/>EngineService"]
+    S --> SN["active snapshot<br/>atomic load"]
+    SN --> B{"breaker open<br/>for decision?"}
+    B -- "yes" --> FB["Snapshot.Fallback"]
+    B -- "no" --> E["Snapshot.Decide"]
+    E -.->|"inline AI node only"| HUB["Integration Hub"]
+    E --> R["response"]
+    FB --> R
+    R --> C
+    S --> L{"sample, force_log<br/>or error?"}
+    L -- "yes" --> BUF["bounded log buffer<br/>drop and count when full"]
+    BUF --> FL["flusher, every second"]
+    FL --> SINK["sink: POST /sidecar/v1/logs<br/>or stdout JSON lines"]
+    S --> M["metrics: /metrics"]
+```
+
+Exposure and update records skip sampling and go through the same buffers.
+
+## Setup and run
+
+Build from the repository root (`make build` builds all three binaries into
+`bin/`):
+
+```bash
+# in a network-restricted sandbox: source scripts/dev/restricted-env.sh (or GEARBOX_RESTRICTED=1 make ...)
+go build -o bin/ ./sidecar/cmd/gearbox-sidecar
+```
+
+Offline, on the example definitions (no control plane):
+
+```bash
+make sidecar-offline
+# same as:
+GEARBOX_SOCKET=$PWD/.data/run/engine.sock \
+  go run ./sidecar/cmd/gearbox-sidecar --definitions-dir examples/definitions --allow-unsigned --watch
+```
+
+Online, against a local control plane: `make dev` starts `gearbox-server`
+(memory store, `GEARBOX_AUTH_MODE=dev`, seeded `lead_service`) and a sidecar on
+`.data/run/engine.sock` with a dev credential and the generated trusted key. By
+hand, with a server already running:
+
+```bash
+GEARBOX_SERVER_URL=http://localhost:8080 GEARBOX_APP=lead_service GEARBOX_ENV=dev \
+GEARBOX_CREDENTIAL='<sidecar credential printed by gearbox-server seed --demo, or created in the UI>' \
+GEARBOX_TRUSTED_KEYS='<trusted key line printed by seed or keygen>' \
+GEARBOX_SOCKET=$PWD/.data/run/engine.sock GEARBOX_CACHE_DIR=$PWD/.data/cache \
+  bin/gearbox-sidecar
+```
+
+`GEARBOX_AUTH_MODE=dev` applies to the control plane only; the sidecar always
+authenticates with its app credential.
+
+Tests: `cd sidecar && go test -race ./...`. Client → socket → sidecar latency
+is measured by `make bench-sidecar`; see [Benchmarks](../docs/07-benchmarks.md)
+for measured numbers.
+
+## Details
+
+Package layout:
+
 ```
 internal/app        wiring, listeners, shutdown          internal/server   EngineService, interceptors
+internal/config     GEARBOX_* env + flags, validation    internal/state    atomic active snapshot
 internal/syncer     loader (verify→open→compile→tests→swap→cache), head/SSE sync, heartbeat
 internal/logs       non-blocking buffers + sinks (stdout JSON lines, POST /sidecar/v1/logs)
 internal/metrics    dependency-free Prometheus registry  internal/obs      metric definitions
 internal/breaker    per-decision circuit breaker         internal/hub      Integration Hub AICaller
-internal/defs       YAML/JSON definitions directory      internal/state    atomic active snapshot
+internal/defs       YAML/JSON definitions directory
 sidecartest/        start an in-process sidecar from an engine.Set (for client/app tests)
 ```
 
@@ -113,7 +229,7 @@ Names follow docs/04-reference.md.
 | `GEARBOX_CREDENTIAL_FILE` / `GEARBOX_CREDENTIAL` | – | App credential |
 | `GEARBOX_TRUSTED_KEYS_FILE` / `GEARBOX_TRUSTED_KEYS` | – | `key_id:base64` (raw or PKIX Ed25519), per line or comma-separated |
 | `GEARBOX_SOCKET` | `/var/run/gearbox/engine.sock` | Unix socket (0660) |
-| `GEARBOX_TCP_ADDR`, `GEARBOX_TCP_TOKEN_FILE` | off | Loopback TCP + bearer token |
+| `GEARBOX_TCP_ADDR`, `GEARBOX_TCP_TOKEN_FILE` | off | Loopback TCP (`127.0.0.1`, `::1` or `localhost`) + bearer token file (required with the address) |
 | `GEARBOX_REFLECTION` | `false` | gRPC reflection |
 | `GEARBOX_METRICS_ADDR` | `:9464` | metrics and probes |
 | `GEARBOX_CACHE_DIR` | `/var/cache/gearbox` | last-known-good bundle |
@@ -126,7 +242,7 @@ Names follow docs/04-reference.md.
 | `GEARBOX_NODE_NAME` | `NODE_NAME` | node in heartbeats |
 | `GEARBOX_MAX_BUNDLE_MB` | `64` | compressed bundle limit (decompressed 4×) |
 | `GEARBOX_MAX_INPUT_BYTES` | `262144` | input limit (`INPUT_TOO_LARGE`) |
-| `GEARBOX_LOG_SINK` | `server` online, `stdout` offline | `stdout`, `server`, `both`, `none`, `otlp` (not implemented: falls back to stdout) |
+| `GEARBOX_LOG_SINK` | `server` online, `stdout` offline | `stdout`, `server` (alias `http`), `both`, `none`, `otlp` (not implemented: falls back to stdout). `server`/`both` need `GEARBOX_SERVER_URL` and a credential |
 | `GEARBOX_LOG_SAMPLE` | `0.01` | default decision-log sampling |
 | `GEARBOX_LOG_BUFFER` | `65536` | buffer size (records) |
 | `GEARBOX_LOG_BATCH` | `1000` | records per upload |

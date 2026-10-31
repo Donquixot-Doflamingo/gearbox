@@ -7,7 +7,53 @@ only to the control-plane HTTP API described in [`contracts/openapi/gearbox-admi
 
 `prototype/index.html` is the clickable HTML prototype the design was ported from.
 
-## Setup
+## How it works
+
+```mermaid
+flowchart LR
+    Y["contracts/openapi/<br/>gearbox-admin.v1.yaml"] -->|"npm run gen:api<br/>scripts/gen-api.py"| G["types.gen.ts<br/>operations.gen.ts"]
+    subgraph B["browser: SvelteKit SPA"]
+        R["routes and editors"] --> G
+        G --> C["client.ts request()<br/>base URL, cookies, CSRF,<br/>problem+json to ApiError"]
+        C --> T{"transport"}
+        T -- "mock mode" --> M["in-browser mock API<br/>fixtures, sessionStorage"]
+    end
+    T -- "fetch PUBLIC_GEARBOX_API" --> P["vite dev proxy<br/>GEARBOX_PROXY, dev only"]
+    T -- "fetch, same origin<br/>or CORS" --> S["gearbox-server /api/v1"]
+    P --> S
+    S --> A{"GEARBOX_AUTH_MODE"}
+    A -- "dev" --> D["every request is the dev user<br/>no login"]
+    A -- "oidc" --> O["session cookie,<br/>401 redirects to /auth/login"]
+```
+
+Every screen calls the generated operation functions; there is no ad-hoc
+`fetch`. The mock implements the same generated `Ops` map, so it is
+type-checked against the contract. Mock mode is on with `PUBLIC_GEARBOX_MOCK=1`
+and switches on by itself in `npm run dev` when the API does not answer.
+
+Route map (all app screens live under `/apps/[app]`, environment in `?env=`):
+
+```mermaid
+flowchart TD
+    ROOT["/"] --> APPS["/apps<br/>app list"]
+    LOGIN["/auth/login"] -.-> APPS
+    APPS --> APP["/apps/[app]<br/>overview"]
+    APP --> AUTHOR["author"]
+    APP --> SHIP["ship"]
+    APP --> OBSERVE["observe"]
+    APP --> SET["settings/*<br/>apps, environments, credentials,<br/>members, tokens, webhooks"]
+    AUTHOR --> SCH["schemas, schemas/[name]"]
+    AUTHOR --> DEC["decisions, decisions/[name],<br/>decisions/[name]/nodes/[node]"]
+    AUTHOR --> RES["segments, lookups, gates,<br/>experiments, layers + /[name]"]
+    AUTHOR --> AI["ai<br/>shadow reports"]
+    SHIP --> CH["changes, changes/new,<br/>changes/[id]"]
+    SHIP --> REL["releases"]
+    OBSERVE --> FL["fleet"]
+    OBSERVE --> LG["logs, logs/[requestId]"]
+    OBSERVE --> OL["update-logs, exposures, audit"]
+```
+
+## Setup and run
 
 Requires Node.js 20.19 or newer.
 
@@ -37,10 +83,19 @@ rollbacks and kill switches. Edits persist in `sessionStorage` for the tab. The 
 
 ### Run against a control plane
 
+Start a local server in dev auth mode first (from the repository root, see
+[controlplane/README.md](../controlplane/README.md)):
+
+```sh
+GEARBOX_AUTH_MODE=dev bin/gearbox-server serve --seed     # :8080, seeded lead_service, no login
+```
+
+Then:
+
 ```sh
 GEARBOX_PROXY=http://localhost:8080 npm run dev     # dev server proxies /api to the control plane (same origin, cookies work)
 # or
-PUBLIC_GEARBOX_API=https://gearbox.example.com/api/v1 npm run dev   # cross-origin: the API must allow CORS with credentials
+PUBLIC_GEARBOX_API=https://gearbox.example.com/api/v1 npm run dev   # cross-origin: the server needs GEARBOX_UI_ORIGIN set to the UI origin (CORS with credentials)
 ```
 
 Settings (build-time, see `.env.example`; set them in the environment or in `ui/.env`):
@@ -52,7 +107,9 @@ Settings (build-time, see `.env.example`; set them in the environment or in `ui/
 | `GEARBOX_PROXY` | empty | Dev server only: proxy `/api` to this origin. |
 | `GEARBOX_UI_BASE` | empty | Serve the UI under a sub-path, e.g. `/console`. |
 
-Auth: the API runs OIDC (`GET /auth/login`) and sets an HTTP-only cookie. On `401` the UI goes to
+Auth: with `GEARBOX_AUTH_MODE=dev` on the server there is no login; every request is the server's dev user
+(`dev@localhost`, admin). The UI does not send `X-Gearbox-Dev-User` itself; the **Act as** menu only exists in
+the mock. With OIDC the API (`GET /auth/login`) sets an HTTP-only cookie. On `401` the UI goes to
 `/auth/login?returnTo=…`, which hands over to `<API>/auth/login`. Mutating requests send `X-CSRF-Token` from
 `GET /session`.
 
@@ -63,7 +120,8 @@ npm run build      # static files in ui/build/
 npm run preview    # serve the build locally
 ```
 
-Deploy `ui/build/` to any static host or CDN, or let `gearbox-server` serve it. Configure the host to answer
+`make ui` runs `npm ci` and `npm run build` from the repository root. Deploy `ui/build/` to any static host or
+CDN, or let `gearbox-server` serve it (`GEARBOX_UI_DIR=ui/build`; the server image does this). Configure the host to answer
 unknown paths with `index.html` (single-page app), for example nginx `try_files $uri /index.html;`.
 
 ### Scripts
@@ -124,7 +182,7 @@ parameters too (`?tab=versions`, `?node=eligibility`), so every view is shareabl
 | `/apps/[app]/update-logs`, `/exposures`, `/audit` | Update, exposure and audit logs |
 | `/apps/[app]/settings/*` | Apps, environment policies, sidecar credentials, members, tokens, webhooks |
 | `/apps`, `/auth/login` | App list (create app), sign-in hand-off |
-| `/changes`, `/fleet`, `/logs`, `/audit`, `/settings` | Shortcuts to the last app (route map in docs/archive/11) |
+| `/changes`, `/fleet`, `/logs`, `/audit`, `/settings` | Shortcuts that redirect to the same screen of the last app |
 
 ## Decisions
 
@@ -161,17 +219,6 @@ parameters too (`?tab=versions`, `?node=eligibility`), so every view is shareabl
 
 ## Known gaps
 
-The npm registry was not reachable while this was written, so nothing that needs `node_modules` has been run:
-
-- **Not compiled or rendered.** No `vite build`, `svelte-check` or browser run has happened. The `.svelte` files were
-  written carefully against Svelte 5 syntax and checked with a rough structural linter (tag and block balance,
-  imports, Svelte 4 syntax), but expect a first `npm run check` to report some type errors (most likely around
-  `bind:` on loosely typed draft objects) and a11y warnings. Please run `npm run check` and `npm run build` first.
-- **Tests not run under Vitest.** The unit tests (`src/lib/**/*.test.ts`: condition builder, schema tree, table cells,
-  graph, Expr evaluator, API wrapper, mock API flows; 58 tests) were type-checked with `tsc` and run here with a
-  minimal Vitest-compatible runner, where they all pass. Run `npm test` to confirm.
-- **Dependency versions** in `package.json` are recent caret ranges chosen without a lockfile; `npm install` will
-  pick current compatible releases.
 - **Mock fidelity.** The mock's Expr evaluator, validator and bucketing approximate the engine (murmur3 bucketing
   is implemented and matches reference values); the server's answers are authoritative.
 - **Contract gaps** are listed in [`contracts/CHANGES-REQUESTED.md`](../contracts/CHANGES-REQUESTED.md): previews need a

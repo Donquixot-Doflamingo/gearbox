@@ -20,7 +20,7 @@ AI decisions are excluded from this release by request: the AI node, its Integra
 | R10 | Dynamic segments | conditions over attributes evaluated at decision time | engine tests (`metro_premium`) | done |
 | R11 | Experiment / rollout segments | `rollout` segments (stable % of units), `variant` conditions, gates | engine tests; `make e2e` experiment and rollout checks | done |
 | R12 | Decision tables, lookups, gates, experiments, layers, holdouts | engine node types and resources | engine tests; old service's bucketing fixtures pass byte-for-byte | done |
-| R13 | Low latency | compiled closures, no locks on the hot path | rule 1.28 µs, 12-field transform 11 µs, `lead_routing` 9.3 µs; full client call p99 0.66–0.85 ms on 2 shared vCPUs (`make bench-sidecar`) | done |
+| R13 | Low latency | compiled closures, no locks on the hot path | [07 · Benchmarks](07-benchmarks.md): `lead_routing` 9.6–10.1 µs in-process; full call p50 212–254 µs, p99 577–753 µs; 945,521 calls/min at 32 callers on 2 shared vCPUs | done |
 
 ## Sidecar and client libraries
 
@@ -31,7 +31,7 @@ AI decisions are excluded from this release by request: the AI node, its Integra
 | S3 | **Control-plane changes reach the sidecar** | — | `make e2e` proves each kind: decision version, segment members, gate create, kill switch, experiment, 50% rollout then 100%, rollback | done |
 | S4 | Sidecar logs which version answered each call and every update | decision log (version, dependency hash, path), update log, exposure log | `make e2e`: decision and update logs reach the control plane | done |
 | S5 | Keeps working when the control plane is down; restarts from disk | last-known-good cache, re-verified on load | `make e2e`: control plane killed → still answers; sidecar restarted with control plane down → ready from disk, same version | done |
-| S6 | Thin client libraries: deadline, fallback, request ID | `clients/go` (full), `clients/python`, `clients/java` | Go: tests + `examples/go-service` + `examples/probe` in `make e2e`. Python: 5 tests against a real sidecar (`clients/python/tests`). Java: compiles only on a machine with Maven, **not run** | Go, Python done · Java partial |
+| S6 | Thin client libraries: deadline, fallback, request ID | `clients/go` (full), `clients/python`, `clients/java` | Go: tests + `examples/go-service` + `examples/probe` in `make e2e`. Python: 5 tests against a real sidecar (`clients/python/tests`). Java: 2 tests pass (Maven 3.9.9, JDK 17); Python and Java example services followed live changes in the demo ([06 §3](06-setup-and-examples-guide.md#3-make-a-change-and-watch-the-services-pick-it-up)) | done (Python/Java latency not yet benchmarked) |
 | S7 | A separate client to integration-test the sidecar | `examples/probe` (`gearbox-probe`): status, decide, gate, variant, bench — uses only the public Go client | used by `make e2e` for every propagation check | done |
 | S8 | Backend service integrated with the sidecar | `examples/go-service` (HTTP service routing leads through the sidecar, 5 ms deadline, fallback) | `make e2e`: answers via sidecar; falls back when the sidecar is down | done |
 
@@ -46,12 +46,13 @@ AI decisions are excluded from this release by request: the AI node, its Integra
 | C5 | Skip sign-in locally | `GEARBOX_AUTH_MODE=dev` (every request is an admin; header can switch user/role) | used by `make e2e` and `make dev` | done (OIDC built, not tested against a real provider) |
 | C6 | Admin UI in Svelte, good design, every panel | `ui/` SvelteKit 2 + Svelte 5 | `svelte-check` 0/0, 58 tests, build OK; all 29 screens opened in a browser against the real server with 0 errors | done |
 | C7 | Remove company names | `scripts/check-names.sh` in CI | passes | done |
-| C8 | Docs: features, user stories, implementation guide, tickets | `docs/01–05`, `tickets/` | — | done |
+| C8 | Docs: features, user stories, implementation guide, tickets, setup guide, benchmarks; diagrams in every README | `docs/01–07`, `tickets/`, module READMEs | Mermaid blocks render with `mmdc` | done |
+| C10 | Show it running: UI change → services update; data in MongoDB | `make demo`, `scripts/demo/ui_demo.py` | screenshots and GIF in `docs/assets`; MongoDB collections listed in [06 §7](06-setup-and-examples-guide.md#7-where-the-data-lives-in-mongodb-and-s3) | done |
 | C9 | AI decisions through the Integration Hub | AI node + placeholder Hub contract | — | excluded for now |
 
 ## Known gaps (tracked in tickets)
 
-- Java client not compiled or run here (no Maven in the build environment).
+- Python and Java client latency not benchmarked yet (commands in [07 §5](07-benchmarks.md#5-python-and-java-clients)).
 - OIDC sign-in not exercised against a real identity provider.
 - OpenTelemetry export (GBX-123); AI cache and budget enforcement (GBX-122).
 - Latency figures come from a 2-vCPU shared sandbox; measure on production hardware before setting SLOs.

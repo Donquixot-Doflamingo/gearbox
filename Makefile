@@ -14,11 +14,9 @@ help: ## Show targets
 	@grep -hE '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  %-14s %s\n", $$1, $$2}'
 
 .PHONY: gen
-gen: ## Generate Go code from proto (and the UI client from OpenAPI when the UI defines `npm run gen`)
-	@if [ -f tools/protogen/main.go ]; then $(GOENV) go run ./tools/protogen; \
-	elif command -v buf >/dev/null; then cd proto && buf generate; \
-	else echo "gen: need tools/protogen or buf (https://buf.build)"; exit 1; fi
-	@if [ -f ui/package.json ] && grep -q '"gen"' ui/package.json; then cd ui && npm run gen; fi
+gen: ## Generate Go code from proto (gen/go) and the UI API client from the OpenAPI file
+	$(GOENV) go run ./gen/go/internal/protogen -proto proto -out gen/go -moddir gen/go
+	cd ui && npm run gen:api
 
 .PHONY: build
 build: ## Build gearbox-server, gearboxctl and gearbox-sidecar into bin/
@@ -78,6 +76,22 @@ clean: ## Remove build output and local data
 e2e: ## End-to-end test: MongoDB + LocalStack S3 (Docker) → server → S3 bundle → sidecar → example service
 	scripts/integration/e2e.sh
 
+.PHONY: demo
+demo: ## Live demo: server + UI + sidecar + Go/Python/Java example services side by side (scripts/demo)
+	scripts/demo/live-demo.sh
+
 .PHONY: bench-sidecar
 bench-sidecar: ## Client → Unix socket → sidecar latency (isolated, offline definitions; 3 × 5,000 calls)
 	scripts/integration/bench-sidecar.sh
+
+.PHONY: bench-load
+bench-load: ## Throughput (calls/min) and latency at concurrency 1,4,8,16,32 against an isolated sidecar
+	scripts/integration/bench-load.sh
+
+.PHONY: bench-propagation
+bench-propagation: ## Publish time and publish→sidecar swap time for N real releases (N=10 JITTER=0s)
+	scripts/integration/bench-propagation.sh
+
+.PHONY: bench-engine
+bench-engine: ## In-process engine micro-benchmarks (3 runs each)
+	cd engine && go test -run '^$$' -bench . -benchmem -count 3 .

@@ -2,8 +2,7 @@
 
 Skipped unless GEARBOX_TEST_SIDECAR points at a running sidecar socket, for example:
 
-    gearbox-sidecar --definitions-dir examples/definitions --allow-unsigned \
-        GEARBOX_SOCKET=/tmp/gbx.sock  &
+    GEARBOX_SOCKET=/tmp/gbx.sock gearbox-sidecar --definitions-dir examples/definitions --allow-unsigned &
     GEARBOX_TEST_SIDECAR=unix:///tmp/gbx.sock pytest
 """
 

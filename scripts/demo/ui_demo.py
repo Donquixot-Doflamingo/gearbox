@@ -32,6 +32,12 @@ def ask(port):
         return f"unavailable ({e.__class__.__name__})"
 
 
+def current_members():
+    """The segment's current members, so the demo only adds a city and never drops others."""
+    url = UI + "/api/v1/apps/lead_service/segments/blocked_cities/members?limit=1000"
+    return json.load(urllib.request.urlopen(url, timeout=5))["items"]
+
+
 def snapshot():
     return {name: ask(port) for name, port in SERVICES.items()}
 
@@ -58,7 +64,8 @@ def main():
         page.goto(A + "?env=dev", wait_until="networkidle"); page.wait_for_timeout(600); shot("01-overview")
 
         page.goto(A + "/segments/blocked_cities?env=dev&tab=members", wait_until="networkidle"); page.wait_for_timeout(500)
-        page.fill("#sg-paste", f"Leh\nKargil\nPort Blair\n{a.city}")
+        members = [m for m in current_members() if m != a.city] + [a.city]
+        page.fill("#sg-paste", "\n".join(members))
         page.get_by_role("button", name="Replace members").click(); page.wait_for_timeout(1200); shot("02-members-replaced")
         note(f"UI: replaced blocked_cities members (added {a.city})")
 
@@ -81,15 +88,17 @@ def main():
         page.get_by_role("button", name="Publish to dev").first.click(); page.wait_for_timeout(300)
         t_publish = time.time()
         page.get_by_role("dialog").get_by_role("button", name="Publish to dev").click()
-        page.wait_for_timeout(1000); shot("05-published")
-        note("UI: published to dev")
 
+        # Poll the services right away (every 50 ms) so the time measured is click → new answer,
+        # not including the screenshot below.
         flipped = {}
         while time.time() - t_publish < 20 and len(flipped) < len(SERVICES):
             for name, port in SERVICES.items():
                 if name not in flipped and "city_not_served" in ask(port):
                     flipped[name] = round(time.time() - t_publish, 2)
             time.sleep(0.05)
+        note("UI: published to dev")
+        page.wait_for_timeout(500); shot("05-published")
         note(f"seconds from Publish click to new answer: {flipped}")
         note(f"services after: {snapshot()}")
 

@@ -1,0 +1,23 @@
+cpu: Intel(R) Xeon(R) Processor @ 2.10GHz
+BenchmarkRule7Conditions-2         	  968422	      1367 ns/op	     144 B/op	       2 allocs/op
+BenchmarkRule7Conditions-2         	 1000000	      1292 ns/op	     144 B/op	       2 allocs/op
+BenchmarkRule7Conditions-2         	  883634	      1428 ns/op	     144 B/op	       2 allocs/op
+BenchmarkTransform12Fields-2       	   97026	     12044 ns/op	    3297 B/op	      59 allocs/op
+BenchmarkTransform12Fields-2       	  108888	     11357 ns/op	    3297 B/op	      59 allocs/op
+BenchmarkTransform12Fields-2       	  101454	     15269 ns/op	    3297 B/op	      59 allocs/op
+BenchmarkRules50FirstMatch-2       	  349558	      3716 ns/op	     144 B/op	       2 allocs/op
+BenchmarkRules50FirstMatch-2       	  293028	      3709 ns/op	     144 B/op	       2 allocs/op
+BenchmarkRules50FirstMatch-2       	  359490	      3541 ns/op	     144 B/op	       2 allocs/op
+BenchmarkLeadRoutingGraph-2        	  131953	      9649 ns/op	    1864 B/op	      42 allocs/op
+BenchmarkLeadRoutingGraph-2        	  116264	     10021 ns/op	    1864 B/op	      42 allocs/op
+BenchmarkLeadRoutingGraph-2        	  106382	     10144 ns/op	    1864 B/op	      42 allocs/op
+BenchmarkLeadRoutingWithDecode-2   	   81282	     15532 ns/op	    4063 B/op	      90 allocs/op
+BenchmarkLeadRoutingWithDecode-2   	   74797	     15050 ns/op	    4064 B/op	      90 allocs/op
+BenchmarkLeadRoutingWithDecode-2   	   84388	     13942 ns/op	    4063 B/op	      90 allocs/op
+BenchmarkParallelLeadRouting-2     	  222278	      5743 ns/op	    1802 B/op	      38 allocs/op
+BenchmarkParallelLeadRouting-2     	  246924	      4872 ns/op	    1802 B/op	      38 allocs/op
+BenchmarkParallelLeadRouting-2     	  240712	      5787 ns/op	    1802 B/op	      38 allocs/op
+BenchmarkCompileLeadSet-2          	    1179	   1068862 ns/op	  472999 B/op	    4982 allocs/op
+BenchmarkCompileLeadSet-2          	     986	   1083622 ns/op	  473002 B/op	    4982 allocs/op
+BenchmarkCompileLeadSet-2          	    1144	   1102025 ns/op	  473004 B/op	    4982 allocs/op
+ok  	github.com/ORG/gearbox/engine	31.833s

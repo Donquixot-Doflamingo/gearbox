@@ -7,17 +7,19 @@ and `bundle/api.go` (bundle writer/reader).
 ```
 engine/
   api.go              contract (bodies delegate to the files below)
+  spec.go             Go shapes of the definition model (OpenAPI components)
   builder.go          resource resolution, problem collection, caches
   decision.go         DecisionSpec compiler: graph shape, flow analysis, node wiring
   nodes.go            node compilers + executors (rules, table, transform, switch, lookup, gate, experiment, subdecision, ai, output)
   cond.go             structured conditions → Go closures (35 field operators, segment/gate/variant/expr leaves)
   expr.go, analyze.go Expr environment, AST patches, Gearbox functions, static analysis (paths, cost, PII taint)
   data.go             data slots ("=" expressions, "==" escape)
+  values.go           runtime value helpers (numeric/string coercion, normalisation)
   resources.go        segments, lookups, gates, experiments, layers
   run.go              runtime: version pick/rollouts, graph execution, fallback, dependency hash
   compile.go          Compile/Set resolver, ValidateResource, Dependencies, schema helpers
   testing.go          RunTests, Benchmark;  meta.go: DecisionMeta, LogFields, DecideParsed, Fallback
-  catalogue.go        GET /meta/expr catalogue
+  catalogue.go        Expr function catalogue (served by the control plane as GET /meta/expr)
   internal/hashing    murmur3 allocation hash (parity fixtures)
   internal/jsonschema compiled JSON Schema subset, compatibility, Accepts
   bundle/             protobuf + zstd + sha256 + Ed25519 bundles, offline file format
@@ -25,6 +27,92 @@ engine/
 ```
 
 ## How it works
+
+The engine has two phases. `Compile` turns an `engine.Set` (every resource
+version of one app+environment) into an immutable `*Snapshot`; `Decide` then
+evaluates requests against that snapshot without locks or I/O. The sidecar
+calls `Compile` after it has verified a bundle; the control plane calls it when
+validating drafts and before publishing.
+
+### Compile pipeline
+
+```mermaid
+flowchart TD
+    S["engine.Set<br/>app, environment, generation,<br/>resources, rollouts, killed gates"] --> O["sort: schemas, layers, segments,<br/>lookups, gates, experiments, decisions"]
+    O --> R["resolve live versions<br/>highest version, or rollout toVersion"]
+    R --> SC["compile JSON Schemas<br/>internal/jsonschema"]
+    SC --> RES["compile segments, lookups,<br/>gates, experiments, layers"]
+    RES --> D["compile decisions"]
+    D --> C1["structured conditions<br/>to Go closures"]
+    D --> C2["Expr: parse, AST patches,<br/>static checks, compile to programs"]
+    D --> C3["graph wiring: next, onError,<br/>switch cases, dominator analysis"]
+    D --> C4["schema checks: SCHEMA_REQUIRED,<br/>SCHEMA_EDGE_MISMATCH, constant outputs"]
+    C1 --> P{"any problems?"}
+    C2 --> P
+    C3 --> P
+    C4 --> P
+    P -- "yes" --> E["*CompileError<br/>problems per resource"]
+    P -- "no" --> SN["*Snapshot<br/>immutable, lock-free reads"]
+```
+
+Validation and compilation are the same code path (`builder`), so
+`ValidateResource` reports exactly what `Compile` would reject.
+
+### Evaluation flow
+
+```mermaid
+flowchart TD
+    REQ["Decide: decision, input, unit, now, pin"] --> PICK["pick version<br/>pin, else rollout bucket, else live"]
+    PICK --> J["decode input JSON"]
+    J --> RS{"decision inputSchema ok?"}
+    RS -- "no" --> ERR1["Error INPUT_SCHEMA or INPUT_TOO_LARGE"]
+    RS -- "yes" --> N["current node"]
+    N --> F["optional from: Expr reshapes node input"]
+    F --> X["execute node"]
+    X --> K{"node type"}
+    K -- "transform" --> T["Expr per target field"]
+    K -- "rules / table" --> RU["check node inputSchema,<br/>conditions with segment, gate,<br/>variant lookups, then output"]
+    K -- "switch, lookup, gate,<br/>experiment, subdecision, ai" --> OT["node-specific executor"]
+    T --> OK{"error?"}
+    RU --> OK
+    OT --> OK
+    OK -- "no, next node" --> N
+    OK -- "no, end" --> OS{"decision outputSchema ok?"}
+    OS -- "yes" --> OUT["Result: output, path,<br/>exposures, dependency hash"]
+    OS -- "no" --> FB
+    OK -- "yes" --> ON{"onError edge?"}
+    ON -- "yes" --> N
+    ON -- "no" --> FB{"decision fallback?"}
+    FB -- "yes" --> OUTF["Result with fallbackUsed=true"]
+    FB -- "no" --> ERR2["Error NODE_ERROR"]
+```
+
+An input-schema failure on the entry node is returned as `INPUT_SCHEMA` /
+`INPUT_TOO_LARGE` to the caller; on any other node it is a node error and takes
+the `onError` edge or the decision fallback. The sidecar adds a per-decision
+circuit breaker on top (`Snapshot.Fallback`).
+
+## Setup and run
+
+The engine is a library; there is no binary. From the repository root:
+
+```bash
+# in a network-restricted sandbox first: source scripts/dev/restricted-env.sh
+cd engine
+go vet ./...
+go test -race ./...                       # unit, lead_routing example, bundle, hashing parity fixtures
+go test -run '^$' -fuzz FuzzDecide -fuzztime 30s .   # also FuzzSpecDecode, FuzzExprCompile
+```
+
+`make test` runs the same for every Go module. `make bench-engine` runs the
+in-process micro-benchmarks (`bench_test.go`); measured numbers are in
+[Benchmarks](../docs/07-benchmarks.md).
+
+To try definitions without the control plane, run a sidecar on a definitions
+directory (`make sidecar-offline`, see [sidecar/README.md](../sidecar/README.md)).
+
+## Details
+
 
 **Compile.** `Compile(set)` resolves every resource (live version = highest
 version, or a rollout's `toVersion`), compiles it and fails with a
@@ -139,7 +227,7 @@ PKIX-DER Ed25519 keys, comma- or newline-separated, `#` comments.
 - AI prompt placeholders `{{ var }}`: strings are inserted raw, other values as JSON.
 - Gate rules with a rollout are skipped without a unit; the result is then `no_unit` if nothing else matched.
 - PII segment members: `hex(HMAC-SHA256(key, member))`, the same function the control plane uses; the sidecar passes `GEARBOX_HMAC_KEY_FILE` as `PIIKey` (default `DefaultPIIKey(app)` only for development).
-- `gen/go` is resolved through `go.work`; `engine/go.mod` lists no requirement for it (a placeholder pseudo-version broke workspace resolution). Add a real requirement when modules are published.
+- `gen/go` is required with the zero pseudo-version `v0.0.0-00010101000000-000000000000` and resolved by a `replace` to `../gen/go` (and by `go.work`). Replace both with a real version when modules are published.
 
 ## Known gaps
 

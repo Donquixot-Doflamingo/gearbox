@@ -2,14 +2,83 @@
 
 `gearbox-server` (the HTTP API in [`contracts/openapi/gearbox-admin.v1.yaml`](../contracts/openapi/gearbox-admin.v1.yaml), publishing, the sidecar feed) and `gearboxctl` (the CLI). Module `github.com/ORG/gearbox/controlplane`.
 
-## Run it locally
+## How it works
+
+### Components
+
+```mermaid
+flowchart LR
+    UI["admin UI<br/>SvelteKit"] -->|"HTTP /api/v1"| MUX
+    CTL["gearboxctl"] -->|"HTTP /api/v1"| MUX
+    SC["sidecars"] -->|"head, watch SSE,<br/>heartbeat, logs"| MUX
+    subgraph SRV["gearbox-server"]
+        MUX["net/http ServeMux<br/>one route per operationId"] --> AUTH["authenticate<br/>dev, OIDC session, PAT,<br/>sidecar credential"]
+        AUTH --> VAL["validate request against<br/>embedded OpenAPI"]
+        VAL --> H["handlers<br/>internal/server"]
+        H --> ENG["internal/engineapi<br/>engine + bundle builder,<br/>Ed25519 signer"]
+        H --> FEED["internal/feed<br/>broadcaster"]
+        H --> WH["webhooks outbox worker"]
+    end
+    H --> ST[("internal/store<br/>memory, file snapshot,<br/>MongoDB")]
+    H --> OBJ[("internal/objstore<br/>filesystem or S3")]
+    ENG --> OBJ
+    FEED <-->|"pub/sub between replicas"| RD[("Redis, optional")]
+    SC -->|"download envelope and blobs:<br/>presigned S3 or signed blob URL"| OBJ
+```
+
+### Release flow
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor A as Author
+    actor R as Approver
+    participant API as gearbox-server
+    participant ST as Store
+    participant OBJ as Object store
+    participant SC as Sidecars
+
+    A->>API: save draft (validated, problems returned)
+    A->>API: cut version (schema compatibility, NO_CHANGES)
+    A->>API: open change request for env (items name@version)
+    API->>API: run test cases of the items, store counts
+    R->>API: approve (self-approval per env policy)
+    API->>ST: status approved when required approvals reached
+    A->>API: POST releases (type change_request)
+    API->>ST: take publish lease for app+env
+    API->>API: assemble engine.Set, Compile, RunTests, benchmark vs budgetMicros
+    alt compile, tests, budget or size fail
+        API-->>A: 422 TESTS_FAILED, BUDGET_EXCEEDED or BUNDLE_TOO_LARGE
+    else ok
+        API->>API: bundle.Build and sign manifest (Ed25519)
+        API->>OBJ: upload new blobs and envelope
+        API->>ST: compare-and-set env state + release record, generation = previous + 1
+        API->>OBJ: write head for app+env
+        API->>API: audit record
+        API->>SC: feed event generation N (SSE watch)
+        API->>API: webhooks
+        SC->>API: GET head, then download from object store
+    end
+```
+
+Rollouts, rollbacks, data releases and kill switches go through the same
+publish path with a different release type.
+
+## Setup and run
+
+The quickest full local stack is `make dev` (from the repository root): it
+builds the binaries, generates a dev signing key in `.data/keys`, and runs
+`gearbox-server --seed` on `:8080` (memory store, filesystem object store,
+`GEARBOX_AUTH_MODE=dev`), a sidecar synced from it, and the UI dev server on
+`:5173`. To run only the server:
 
 ```bash
 source scripts/dev/restricted-env.sh   # only in the network-restricted sandbox
-go build -o bin/ ./controlplane/cmd/...
+go build -o bin/ ./controlplane/cmd/...   # or: make build
 
-# Everything in memory, seeded with the demo app, published to dev:
-bin/gearbox-server serve --seed
+# Everything in memory, seeded with the demo app, published to dev.
+# Without GEARBOX_OIDC_ISSUER the server runs in dev auth mode; set it explicitly:
+GEARBOX_AUTH_MODE=dev bin/gearbox-server serve --seed
 
 # Or keep state between runs (JSON snapshot + filesystem object store):
 export GEARBOX_STORE=file://$PWD/.data/store
@@ -36,7 +105,11 @@ bin/gearboxctl release change-request cr_2 --env prod
 bin/gearboxctl bundle export --env dev -o lead_service-dev.bundle   # for gearbox-sidecar --bundle-file
 ```
 
-Tests: `go vet ./controlplane/... && go test -race ./controlplane/...` (Redis tests use a local `redis-server` when installed; MongoDB and S3 integration tests run when `GEARBOX_TEST_MONGO_URI` / `GEARBOX_TEST_S3_URL` are set).
+In dev auth mode every request is `GEARBOX_DEV_USER` (`dev@localhost`, role `GEARBOX_DEV_ROLE`=`admin`); send `X-Gearbox-Dev-User` / `X-Gearbox-Dev-Role` to act as someone else. Never use dev mode outside local development.
+
+Tests: `cd controlplane && go vet ./... && go test -race ./...` (or `make vet test` for every module). Redis tests start a local `redis-server` when installed (or use `GEARBOX_TEST_REDIS_URL`); MongoDB and S3 integration tests run when `GEARBOX_TEST_MONGO_URI` / `GEARBOX_TEST_S3_URL` are set. `make e2e` runs MongoDB + LocalStack S3 in Docker, then server → S3 bundle → sidecar → example service.
+
+Publish time and publish-to-sidecar propagation are measured by `make bench-propagation`; see [Benchmarks](../docs/07-benchmarks.md) for measured numbers.
 
 ## Configuration
 
@@ -86,6 +159,7 @@ internal/store       Backend (CAS documents, TTL records, leases) → typed Stor
 internal/objstore    fs (signed /sidecar/v1/blobs URLs) and S3 (minio-go presigned URLs)
 internal/feed        in-process broadcaster + Redis pub/sub relay
 internal/auth        token/credential hashing, Ed25519 keys, OIDC client
+internal/model       API and storage types (hand-written from the contract)
 internal/seed, defs, client   demo seeder, definition files (docs §10), API client
 ```
 
@@ -95,7 +169,7 @@ internal/seed, defs, client   demo seeder, definition files (docs §10), API cli
 
 ## Decisions
 
-- **net/http ServeMux + hand-written types**, not oapi-codegen (could not build it here). The contract is still enforced: every route is bound to an `operationId` (startup fails if any operation lacks a handler), requests are validated against the embedded YAML with kin-openapi, and the test suite validates every response against the YAML (`TestMain` fails unless all 67 operations were exercised; 124 operation/status pairs are covered). The task said 68 operations; the contract has 67.
+- **net/http ServeMux + hand-written types**, not oapi-codegen (could not build it here). The contract is still enforced: every route is bound to an `operationId` (startup fails if any operation lacks a handler), requests are validated against the embedded YAML with kin-openapi, and the test suite validates every response against the YAML (`TestMain` fails unless all 67 operations were exercised; 124 operation/status pairs are covered).
 - **Request validation errors**: body errors are `422 VALIDATION_FAILED` when the operation declares 422, else `400 INVALID_ARGUMENT`; parameter errors are 400. Resource specs (`createResource`, `saveDraft`, `validateResource`) are validated by the handler against the kind's component schema *after* the schema-registry rule, so a rules node without schemas yields `SCHEMA_REQUIRED`, not a generic shape error, and `validate` always answers 200.
 - **Status codes** per the lead: `NOT_APPROVED` 409, `TESTS_FAILED` 422, `BUNDLE_TOO_LARGE` 422. Additional codes: `BREAKING_CHANGE` 422 (schema cut), `NO_CHANGES` 409 (cut of an unchanged draft), `INVALID_STATE` 409 (change request transition), `NOT_ROLLING_OUT` 409, `BUDGET_EXCEEDED` 422, `BUSY` 409 (publish lease timeout), `NODE_ERROR` 500 (remote decide without fallback), field code `DEPENDENCY_NOT_LIVE`.
 - **One Store over a tiny Backend**: CAS, revision conflicts, counters and strictly increasing generations are implemented once (`CommitRelease` compares the environment document version and generation) and checked by a conformance suite run on both backends, including 8 concurrent publishers. Publishing also takes a lease (`Backend.Lock`, Mongo lease document across replicas).
@@ -115,7 +189,7 @@ internal/seed, defs, client   demo seeder, definition files (docs §10), API cli
 
 - **OIDC** is implemented (go-oidc, state/nonce cookie, server-side sessions, CSRF) but only the session/CSRF half is tested; no identity provider was reachable here.
 - **MongoDB**: the backend compiles and its helpers are unit-tested; the conformance suite (`GEARBOX_TEST_MONGO_URI`) has never run in this sandbox (no MongoDB binary). Same for the S3 store (`GEARBOX_TEST_S3_URL`); presigning is tested offline.
-- `go.mod` lists direct requirements only and there is no `controlplane/go.sum`: in the restricted sandbox modules resolve through the workspace (`go.work.sum`). Run `go mod tidy` in `controlplane/` on a machine with normal module proxy access.
+- `controlplane/go.sum` is committed; in the restricted sandbox vanity module paths resolve through GitHub mirrors (`scripts/dev/restricted-env.sh`). If it drifts, run `go mod tidy` in `controlplane/` on a machine with normal module proxy access.
 - kin-openapi v0.128 (the last line that builds with Go 1.24) ignores OpenAPI 3.1 `const`, so response validation does not check `type: decision|update|exposure` on log records.
 - `ResourceSummary.stats` come from sampled decision logs of the last hour in `prod` (calls/minute is the sampled count).
 - The shadow report reads `ai[].result` as the AI's label (or `timeout`/`schema_error`/`error`) and an extra `ai[].decided` field (falls back to the record's `output`); see the change request.
