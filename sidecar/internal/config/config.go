@@ -34,7 +34,9 @@ type Config struct {
 	MaxInputBytes  int
 	LogSample      float64
 	LogBuffer      int
-	LogSink        string // stdout | http | both | none
+	LogSink        string // stdout | server | both | none | otlp
+	LogBatch       int
+	HMACKey        []byte
 	LogHMACKey     []byte
 	PIIKey         []byte
 	OTLPEndpoint   string
@@ -149,7 +151,8 @@ func Load(args []string, getenv Getenv) (*Config, error) {
 	c.MaxBundleMB = integer("GEARBOX_MAX_BUNDLE_MB", 64, 1)
 	c.MaxInputBytes = integer("GEARBOX_MAX_INPUT_BYTES", 262144, 1)
 	c.LogBuffer = integer("GEARBOX_LOG_BUFFER", 65536, 16)
-	c.LogSink = str("GEARBOX_LOG_SINK", "stdout")
+	c.LogSink = str("GEARBOX_LOG_SINK", "")
+	c.LogBatch = integer("GEARBOX_LOG_BATCH", 1000, 1)
 	c.OTLPEndpoint = str("GEARBOX_OTLP_ENDPOINT", "")
 	c.MetricsAddr = str("GEARBOX_METRICS_ADDR", ":9464")
 	c.HubURL = strings.TrimRight(str("GEARBOX_HUB_URL", ""), "/")
@@ -158,15 +161,20 @@ func Load(args []string, getenv Getenv) (*Config, error) {
 	c.HeartbeatEvery = dur("GEARBOX_HEARTBEAT_INTERVAL", 30*time.Second)
 	c.FetchJitter = dur("GEARBOX_FETCH_JITTER", 2*time.Second)
 	c.RPCTimeout = dur("GEARBOX_RPC_TIMEOUT", 11*time.Second)
-	if k := fileOr("GEARBOX_LOG_HMAC_KEY_FILE", "GEARBOX_LOG_HMAC_KEY"); k != "" {
-		c.LogHMACKey = []byte(k)
-	}
-	if k := fileOr("GEARBOX_PII_HMAC_KEY_FILE", "GEARBOX_PII_HMAC_KEY"); k != "" {
-		c.PIIKey = []byte(k)
+	// One installation key (shared with the control plane) for logged
+	// hashes and pii segment members. Like the control plane, the value may
+	// be a file path or the key itself.
+	if v := str("GEARBOX_HMAC_KEY_FILE", str("GEARBOX_HMAC_KEY", "")); v != "" {
+		k := v
+		if b, err := os.ReadFile(v); err == nil {
+			k = strings.TrimSpace(string(b))
+		}
+		c.HMACKey = []byte(k)
+		c.LogHMACKey, c.PIIKey = c.HMACKey, c.HMACKey
 	}
 	host, _ := os.Hostname()
 	c.SidecarID = str("GEARBOX_SIDECAR_ID", str("POD_NAME", host))
-	c.Node = str("GEARBOX_NODE", str("NODE_NAME", ""))
+	c.Node = str("GEARBOX_NODE_NAME", str("NODE_NAME", ""))
 	if v := str("GEARBOX_LOG_SAMPLE", ""); v != "" {
 		f, err := strconv.ParseFloat(v, 64)
 		if err != nil || f < 0 || f > 1 {
@@ -178,10 +186,26 @@ func Load(args []string, getenv Getenv) (*Config, error) {
 	}
 
 	// Validation.
+	if c.LogSink == "" {
+		c.LogSink = "server"
+		if c.Offline() {
+			c.LogSink = "stdout"
+		}
+	}
 	switch c.LogSink {
-	case "stdout", "http", "both", "none":
+	case "http":
+		c.LogSink = "server"
+	case "stdout", "server", "both", "none", "otlp":
 	default:
-		errs = append(errs, "GEARBOX_LOG_SINK: must be stdout, http, both or none")
+		errs = append(errs, "GEARBOX_LOG_SINK: must be stdout, server, both, none or otlp")
+	}
+	if c.Offline() {
+		if c.App == "" {
+			c.App = "local"
+		}
+		if c.Env == "" {
+			c.Env = "dev"
+		}
 	}
 	if c.BundleFile != "" && c.DefinitionsDir != "" {
 		errs = append(errs, "--bundle-file and --definitions-dir are mutually exclusive")
@@ -211,9 +235,9 @@ func Load(args []string, getenv Getenv) (*Config, error) {
 	} else if c.BundleFile != "" && !c.AllowUnsigned && c.TrustedKeys == "" {
 		errs = append(errs, "--bundle-file needs GEARBOX_TRUSTED_KEYS(_FILE) or --allow-unsigned")
 	}
-	if c.LogSink == "http" || c.LogSink == "both" {
+	if c.LogSink == "server" || c.LogSink == "both" {
 		if c.ServerURL == "" || c.Credential == "" {
-			errs = append(errs, "GEARBOX_LOG_SINK=http needs GEARBOX_SERVER_URL and a credential")
+			errs = append(errs, "GEARBOX_LOG_SINK=server needs GEARBOX_SERVER_URL and a credential")
 		}
 	}
 	if c.TCPAddr != "" {

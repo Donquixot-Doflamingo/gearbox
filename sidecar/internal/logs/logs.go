@@ -119,6 +119,7 @@ type Logger struct {
 	dropped   func(log string, n int)
 	key       []byte
 	every     time.Duration
+	batch     int
 	wake      chan struct{}
 	done      chan struct{}
 	once      sync.Once
@@ -131,8 +132,15 @@ func New(size int, key []byte, sinks []Sink, dropped func(log string, n int)) *L
 	}
 	return &Logger{
 		decisions: make(chan any, size), updates: make(chan any, size/16+16), exposures: make(chan any, size),
-		sinks: sinks, dropped: dropped, key: key, every: time.Second,
+		sinks: sinks, dropped: dropped, key: key, every: time.Second, batch: MaxBatch,
 		wake: make(chan struct{}, 1), done: make(chan struct{}),
+	}
+}
+
+// SetBatch sets the records per upload (1..MaxBatch).
+func (l *Logger) SetBatch(n int) {
+	if n >= 1 && n <= MaxBatch {
+		l.batch = n
 	}
 }
 
@@ -142,7 +150,7 @@ func (l *Logger) SetFlushInterval(d time.Duration) { l.every = d }
 func (l *Logger) put(ch chan any, log string, rec any) {
 	select {
 	case ch <- rec:
-		if len(ch) >= MaxBatch {
+		if len(ch) >= l.batch {
 			select {
 			case l.wake <- struct{}{}:
 			default:
@@ -219,9 +227,9 @@ func drain(ch chan any, max int, into []any) []any {
 func (l *Logger) flush(ctx context.Context) {
 	for {
 		batch := make([]any, 0, 64)
-		batch = drain(l.updates, MaxBatch, batch)
-		batch = drain(l.exposures, MaxBatch, batch)
-		batch = drain(l.decisions, MaxBatch, batch)
+		batch = drain(l.updates, l.batch, batch)
+		batch = drain(l.exposures, l.batch, batch)
+		batch = drain(l.decisions, l.batch, batch)
 		if len(batch) == 0 {
 			return
 		}
@@ -237,7 +245,7 @@ func (l *Logger) flush(ctx context.Context) {
 				slog.Warn("log sink failed; records dropped", "records", len(batch), "error", err)
 			}
 		}
-		if len(batch) < MaxBatch {
+		if len(batch) < l.batch {
 			return
 		}
 	}

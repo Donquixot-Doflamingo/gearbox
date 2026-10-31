@@ -165,6 +165,23 @@ type httpStatusError struct {
 func (e *httpStatusError) Error() string { return fmt.Sprintf("GET %s: HTTP %d", e.url, e.status) }
 
 func (s *Syncer) get(ctx context.Context, rawURL string, header http.Header, limit int64) (*http.Response, []byte, error) {
+	return s.fetch(ctx, rawURL, header, limit, true)
+}
+
+// download fetches a blob or envelope URL. Those URLs are self-authenticating
+// (presigned or signed with sig/exp), so no Authorization header is sent.
+func (s *Syncer) download(ctx context.Context, rawURL string, limit int64) ([]byte, error) {
+	resp, body, err := s.fetch(ctx, rawURL, nil, limit, false)
+	if err != nil {
+		return nil, err
+	}
+	if resp.StatusCode != http.StatusOK {
+		return nil, &httpStatusError{status: resp.StatusCode, url: redact(rawURL)}
+	}
+	return body, nil
+}
+
+func (s *Syncer) fetch(ctx context.Context, rawURL string, header http.Header, limit int64, auth bool) (*http.Response, []byte, error) {
 	u, err := s.resolve(rawURL)
 	if err != nil {
 		return nil, nil, err
@@ -176,7 +193,7 @@ func (s *Syncer) get(ctx context.Context, rawURL string, header http.Header, lim
 	for k, v := range header {
 		req.Header[k] = v
 	}
-	if s.sameHost(u) {
+	if auth {
 		req.Header.Set("Authorization", "Bearer "+s.Credential)
 	}
 	resp, err := s.HTTP.Do(req)
@@ -210,20 +227,15 @@ func (s *Syncer) resolve(raw string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	if strings.HasPrefix(raw, "/") {
+	if strings.HasPrefix(u.Path, "/") {
 		// Paths like /sidecar/v1/blobs/… are relative to the API base.
-		if !strings.HasPrefix(raw, base.Path) {
-			raw = strings.TrimRight(base.Path, "/") + raw
+		p := u.Path
+		if !strings.HasPrefix(p, strings.TrimRight(base.Path, "/")+"/") {
+			p = strings.TrimRight(base.Path, "/") + p
 		}
-		return base.ResolveReference(&url.URL{Path: raw, RawQuery: u.RawQuery}).String(), nil
+		return base.ResolveReference(&url.URL{Path: p, RawQuery: u.RawQuery}).String(), nil
 	}
 	return base.ResolveReference(u).String(), nil
-}
-
-func (s *Syncer) sameHost(u string) bool {
-	a, err1 := url.Parse(u)
-	b, err2 := url.Parse(s.BaseURL)
-	return err1 == nil && err2 == nil && a.Host == b.Host
 }
 
 func redact(u string) string {
@@ -294,7 +306,7 @@ func (s *Syncer) fetchAndInstall(ctx context.Context, cur *state.Active, head He
 		}
 	}
 	started := time.Now()
-	_, env, err := s.get(ctx, head.Envelope.URL, nil, 16<<20)
+	env, err := s.download(ctx, head.Envelope.URL, 16<<20)
 	if err != nil {
 		return fmt.Errorf("envelope: %w", err)
 	}
@@ -322,12 +334,9 @@ func (s *Syncer) fetchAndInstall(ctx context.Context, cur *state.Active, head He
 		if !ok {
 			return s.reject(env, head.Generation, started, fmt.Errorf("%w: no download URL for blob %s", bundle.ErrMissingBlob, h))
 		}
-		resp, d, err := s.get(ctx, u, nil, s.MaxBundle-total)
+		d, err := s.download(ctx, u, s.MaxBundle-total)
 		if err != nil {
 			return fmt.Errorf("blob %s: %w", h, err)
-		}
-		if resp.StatusCode != http.StatusOK {
-			return &httpStatusError{status: resp.StatusCode, url: redact(u)}
 		}
 		if shaHex(d) != h {
 			return s.reject(env, head.Generation, started, fmt.Errorf("%w: blob %s", bundle.ErrHash, h))
