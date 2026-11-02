@@ -513,7 +513,7 @@ func (b *builder) layerSpec(r Resource) *layer {
 }
 
 // assign evaluates an experiment for a unit; attrs are the targeting
-// attributes. Order (parity with the previous service): status, unit,
+// attributes. Order: status, unit,
 // holdout, layer allocation, targeting, variant bucket.
 func (e *experiment) assign(r *run, unit string, attrs any) (VariantResult, error) {
 	res := VariantResult{Version: e.version}

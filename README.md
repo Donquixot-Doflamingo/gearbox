@@ -61,7 +61,7 @@ Step by step: [docs/06 · Setup and examples guide](docs/06-setup-and-examples-g
 
 | Part | State | Verified |
 |---|---|---|
-| Engine | Schema registry rules, JSON Schema subset (nested, nullable), 35 operators, segment / gate / variant / Expr conditions, all node types, rollouts, dependency hash, tests, cost and PII checks, signed bundles | `go test -race`, fuzz, staticcheck; the old service's bucketing fixtures pass |
+| Engine | Schema registry rules, JSON Schema subset (nested, nullable), 35 operators, segment / gate / variant / Expr conditions, all node types, rollouts, dependency hash, tests, cost and PII checks, signed bundles | `go test -race`, fuzz, staticcheck; golden bucketing fixtures pass |
 | Sidecar | Complete except OpenTelemetry export | unit tests + `make e2e` |
 | Control plane + `gearboxctl` | All 67 API operations; memory / file / MongoDB stores; filesystem / S3 object stores; approvals, rollouts, rollback, kill switch, SSE feed; OIDC + local dev auth | every response checked against the OpenAPI file; MongoDB and S3 (LocalStack) suites |
 | Admin UI (SvelteKit) | Every screen | `svelte-check` 0/0, 58 tests, build OK; all 29 screens opened against the real server with 0 browser errors; UI publish flow recorded ([GIF](docs/assets/ui-demo.gif)) |
@@ -110,9 +110,38 @@ Measured on a **2-vCPU shared cloud sandbox** (client comparison: a 4-vCPU arm64
 | [`deploy/`](deploy/) | Dockerfiles, docker compose, Helm charts, local dev script | `agent/docs` |
 | [`docs/`](docs/), [`tickets/`](tickets/) | Documentation and the ticket list | `agent/docs` |
 
-## Quick start
+## Start and stop it locally
 
-Needs Go 1.24 (and Node 22 for the UI).
+```bash
+git clone https://github.com/Donquixot-Doflamingo/gearbox && cd gearbox
+make start      # builds, starts everything in the background, opens the UI and the live impact page
+make status     # what is running, with URLs
+make stop       # stops everything; your changes are kept in .data/run
+```
+
+On macOS you can also double-click **`Start Gearbox.command`** and **`Stop Gearbox.command`** in the repository folder.
+
+| Opens | What it is |
+|---|---|
+| http://127.0.0.1:8080 | **Admin UI** (no sign-in locally). Edit segments, rules and decisions, then publish |
+| http://127.0.0.1:8099 | **Live impact page**: what the Go, Python and Java example services answer right now, refreshed every second |
+
+`make start` runs the control plane with the admin UI, one sidecar, the example services and the live impact page. Try it: in the UI go to **Segments → blocked_cities**, add `Indore`, **Cut version → Request release → Publish to dev**. Within about 2 seconds the Indore row on the live impact page turns `reject`.
+
+![Live impact page](docs/assets/09-live-impact.png)
+
+- **Needs:** Go 1.24+, Python 3 and Node 20+. The UI is built on the first run.
+- **Optional:**
+  - The Python service needs a one-time `python3 -m pip install grpcio protobuf grpcio-tools && (cd clients/python && ./scripts/gen.sh && python3 -m pip install -e .)`.
+  - The Java service needs Java 17 and Maven (`brew install openjdk@17 maven`).
+  - Services that aren't set up are skipped, and the start output says how to enable them.
+- **Ports:** if 8080 is taken by another program, the UI moves to the next free port, and the start output and `make status` show which. To choose one yourself: `GEARBOX_PORT=8090 make start`.
+- **Data:** stored in `.data/run` and kept between runs. `scripts/gearbox.sh reset` deletes it. To keep data in MongoDB instead: `GEARBOX_STORE="mongodb://127.0.0.1:27017/?directConnection=true" make start`.
+- **Logs:** `scripts/gearbox.sh logs server` (or `sidecar`, `go`, `python`, `java`, `monitor`).
+
+## Other ways to run it
+
+For UI development with hot reload (needs Go 1.24 and Node 20+):
 
 ```bash
 make dev                                   # server :8080 (seeded), sidecar, UI :5173

@@ -8,7 +8,7 @@ AI decisions are excluded from this release by request: the AI node, its Integra
 
 | # | Requirement | Where | Proof | Status |
 |---|---|---|---|---|
-| R1 | Rule engine with all the old service's operators, plus free-form expressions | `engine/` conditions (35 operators compiled to Go closures), Expr conditions | `engine` unit tests; operator table in [04-reference](04-reference.md) | done |
+| R1 | Rule engine with a full operator set, plus free-form expressions | `engine/` conditions (35 operators compiled to Go closures), Expr conditions | `engine` unit tests; operator table in [04-reference](04-reference.md) | done |
 | R2 | Simple, Jolt-like JSON transformation using Expr (GoExpr) | `transform` node: ordered `target: expression` fields, defaults, drop, patch mode | engine tests; `lead_routing` uses a transform before its rules node | done |
 | R3 | Decision trees / graphs: chain transform → rules → output, branch with switch, error edges, fallback | `engine` graph runtime (entry, next, switch, onError, fallback, subdecision) | engine tests; test console in the UI shows the path | done |
 | R4 | **Schema registry first**: a rules node cannot be created without a registered input schema; it runs only on input matching that schema | control plane rejects save with `422 SCHEMA_REQUIRED` / `SCHEMA_NOT_FOUND`; engine validates node input before rules run | `make e2e` check "rule node without schemas → 422 SCHEMA_REQUIRED"; engine tests | done |
@@ -19,7 +19,7 @@ AI decisions are excluded from this release by request: the AI node, its Integra
 | R9 | Static segments | uploaded members (HMAC when PII), `IN_SEGMENT` | `make e2e`: adding a city to `blocked_cities` changes the sidecar's answer | done |
 | R10 | Dynamic segments | conditions over attributes evaluated at decision time | engine tests (`metro_premium`) | done |
 | R11 | Experiment / rollout segments | `rollout` segments (stable % of units), `variant` conditions, gates | engine tests; `make e2e` experiment and rollout checks | done |
-| R12 | Decision tables, lookups, gates, experiments, layers, holdouts | engine node types and resources | engine tests; old service's bucketing fixtures pass byte-for-byte | done |
+| R12 | Decision tables, lookups, gates, experiments, layers, holdouts | engine node types and resources | engine tests; golden bucketing fixtures pass byte-for-byte | done |
 | R13 | Low latency | compiled closures, no locks on the hot path | [07 · Benchmarks](07-benchmarks.md): `lead_routing` 9.6–10.1 µs in-process; full call p50 212–254 µs, p99 577–753 µs; 945,521 calls/min at 32 callers on 2 shared vCPUs | done |
 
 ## Sidecar and client libraries
