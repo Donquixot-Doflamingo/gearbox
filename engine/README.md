@@ -159,8 +159,7 @@ strings; `EQ` compares numbers numerically (and a numeric string with a number);
 `CONTAINS_ANY/NONE` on lists (substring-any on strings); `MATCHES` RE2 compiled
 once (`(?i)` for case-insensitive); `IS_TRUE/IS_FALSE` accept `"true"/"false"`.
 
-**Hashing** (`internal/hashing`, parity with the previous experimentation
-service, golden fixtures in `internal/hashing/testdata`):
+**Hashing** (`internal/hashing`, golden fixtures in `internal/hashing/testdata`):
 `bucket = murmur3_32(frame(schemaVersion, tenant, scope, resourceID, assignmentVersion, salt, value)) * 10000 >> 32`
 with uint32 big-endian length prefixes. Gearbox uses it with:
 
@@ -234,5 +233,4 @@ PKIX-DER Ed25519 keys, comma- or newline-separated, `#` comments.
 - Tables: `unique` overlap is detected at runtime (and therefore by test cases), not statically for ranges.
 - AI `cache` and `budget` settings are parsed but not enforced (Hub enforces the hard budget).
 - Expression type checks rely on Expr's checker with untyped input (`any`); arithmetic on optional fields is not rejected statically.
-- The canonical-JSON / exposure-token fixtures of the previous service are not ported (Gearbox has no equivalent feature); the allocation, range and digest-frame fixtures are.
 - Lead decision examples use `ctx.now`; tests without `ctx.now` use the wall clock.

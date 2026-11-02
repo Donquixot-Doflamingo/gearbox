@@ -1,5 +1,5 @@
 {
- "description": "Golden allocation fixtures ported for behaviour parity with the previous experimentation service. allocation = murmur3_32 (x86, seed 0) over a length-prefixed frame (uint32 big-endian lengths) of [schemaVersion, tenantId, scope, resourceId, assignmentVersion, salt, randomizationValue]; bucket = hash*10000>>32.",
+ "description": "Golden allocation fixtures (fixed expected buckets). allocation = murmur3_32 (x86, seed 0) over a length-prefixed frame (uint32 big-endian lengths) of [schemaVersion, tenantId, scope, resourceId, assignmentVersion, salt, randomizationValue]; bucket = hash*10000>>32.",
  "allocationCases": [
   {
    "name": "experiment ascii",

@@ -50,6 +50,7 @@ func run(log *slog.Logger) error {
 		return err
 	}
 	defer client.Close()
+	warmUp(ctx, client, log)
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusNoContent) })
@@ -118,4 +119,19 @@ func env(key, def string) string {
 		return v
 	}
 	return def
+}
+
+// warmUp makes a few calls with a generous deadline before serving, so the first real request
+// does not miss the 5 ms deadline while the connection is set up and fall back.
+func warmUp(ctx context.Context, c *gearbox.Client, log *slog.Logger) {
+	lead := map[string]any{
+		"lead": map[string]any{"id": "warm-up", "city": "Pune", "source": "web"},
+		"car":  map[string]any{"make": "Hyundai", "model": "i20", "year": 2021, "km": 12000, "price": 690000},
+	}
+	for i := 0; i < 50; i++ {
+		if _, err := c.Decide(ctx, "lead_routing", lead, gearbox.WithUnit("warm-up"), gearbox.WithTimeout(2*time.Second)); err != nil {
+			log.Warn("warm-up: sidecar not answering yet; serving anyway (the fallback covers it)", "error", err)
+			return
+		}
+	}
 }
