@@ -81,7 +81,37 @@ pip install grpcio protobuf grpcio-tools
 (cd examples/java-service && mvn -q package)   # → target/java-service.jar
 ```
 
-### Start the live demo
+### Start and stop (background)
+
+```bash
+make start     # or double-click "Start Gearbox.command" on macOS
+make status
+make stop      # or double-click "Stop Gearbox.command"
+```
+
+`make start` (`scripts/gearbox.sh`) builds what is needed, then starts everything in the background:
+- the control plane with the UI on 8080 (or the next free port);
+- a sidecar;
+- the Go, Python and Java services (each one that is set up);
+- the **live impact page** on 8099, which shows every service's answer for four sample leads each second.
+
+It opens the UI and the impact page in your browser. Definitions are stored in `.data/run/store`, so changes made in the UI are still there after `make stop` and `make start`. Each component's log is in `.data/run/<name>.log`.
+
+```mermaid
+flowchart LR
+  start(["make start"]) --> S["gearbox-server + UI :8080"]
+  start --> SC["gearbox-sidecar"]
+  start --> G["go :8081"] & P["python :8082"] & J["java :8083"]
+  start --> M["live impact page :8099"]
+  S -- bundle --> SC
+  G & P & J -- gRPC --> SC
+  M -- "POST /route every second" --> G & P & J
+  M -- "generation" --> SC
+```
+
+![Live impact page](assets/09-live-impact.png)
+
+### Start the live demo (foreground, terminal table)
 
 ```bash
 make demo                                                          # memory store

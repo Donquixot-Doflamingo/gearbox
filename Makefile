@@ -18,6 +18,22 @@ gen: ## Generate Go code from proto (gen/go) and the UI API client from the Open
 	$(GOENV) go run ./gen/go/internal/protogen -proto proto -out gen/go -moddir gen/go
 	cd ui && npm run gen:api
 
+.PHONY: start
+start: ## Start Gearbox locally in the background: UI + API, sidecar, Go/Python/Java services, live impact page
+	scripts/gearbox.sh start
+
+.PHONY: stop
+stop: ## Stop everything `make start` started (data is kept in .data/run)
+	scripts/gearbox.sh stop
+
+.PHONY: status
+status: ## What is running locally, with URLs
+	scripts/gearbox.sh status
+
+.PHONY: restart
+restart: ## Stop, then start
+	scripts/gearbox.sh restart
+
 .PHONY: build
 build: ## Build gearbox-server, gearboxctl and gearbox-sidecar into bin/
 	@mkdir -p $(BIN)
